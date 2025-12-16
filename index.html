@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Radar Check - BR040</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- SheetJS for Excel reading/writing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body>
+    <!-- Splash Screen -->
+    <div id="splash-screen" class="splash-screen">
+        <div class="splash-content">
+            <div class="splash-icon">📡</div>
+            <h1>Radar Check</h1>
+            <p>BR-040</p>
+            <div class="loading-spinner"></div>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="app" class="app-container hidden">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <button id="menu-btn" class="icon-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+                <h1 class="header-title">Radar Check</h1>
+            </div>
+            <div class="header-right">
+                <span class="connection-status" id="connection-status">
+                    <span class="status-dot online"></span>
+                    Online
+                </span>
+            </div>
+        </header>
+
+        <!-- Side Menu -->
+        <div id="side-menu" class="side-menu">
+            <div class="menu-header">
+                <h2>Menu</h2>
+                <button id="close-menu" class="icon-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <nav class="menu-nav">
+                <a href="#" class="menu-item active" data-view="dashboard">
+                    <span class="menu-icon">📊</span>
+                    Dashboard
+                </a>
+                <a href="#" class="menu-item" data-view="radares">
+                    <span class="menu-icon">📡</span>
+                    Radares
+                </a>
+                <a href="#" class="menu-item" data-view="checklist">
+                    <span class="menu-icon">✅</span>
+                    Checklists
+                </a>
+                <a href="#" class="menu-item" data-view="export">
+                    <span class="menu-icon">📤</span>
+                    Exportar
+                </a>
+            </nav>
+            <div class="menu-footer">
+                <button id="import-excel-btn" class="btn btn-outline">
+                    <span>📥</span> Importar Excel
+                </button>
+                <input type="file" id="excel-file-input" accept=".xlsx,.xls" hidden>
+            </div>
+        </div>
+        <div id="menu-overlay" class="menu-overlay"></div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view active">
+                <div class="view-header">
+                    <h2>Dashboard</h2>
+                    <p class="subtitle">Visão geral dos radares BR-040</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">📡</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-total">0</span>
+                            <span class="stat-label">Total Radares</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">✅</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-conformes">0</span>
+                            <span class="stat-label">Conformes</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">❌</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-nao-conformes">0</span>
+                            <span class="stat-label">Não Conformes</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon yellow">⏳</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-pendentes">0</span>
+                            <span class="stat-label">Pendentes</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <h3>Ações Rápidas</h3>
+                    <div class="action-buttons">
+                        <button class="action-btn" data-action="new-checklist">
+                            <span class="action-icon">📝</span>
+                            <span>Novo Checklist</span>
+                        </button>
+                        <button class="action-btn" data-action="add-radar">
+                            <span class="action-icon">➕</span>
+                            <span>Adicionar Radar</span>
+                        </button>
+                        <button class="action-btn" data-action="export-pdf">
+                            <span class="action-icon">📄</span>
+                            <span>Exportar PDF</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="recent-activity">
+                    <h3>Últimas Verificações</h3>
+                    <div id="recent-list" class="activity-list">
+                        <p class="empty-message">Nenhuma verificação realizada ainda.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Radares List View -->
+            <section id="view-radares" class="view">
+                <div class="view-header">
+                    <h2>Radares Cadastrados</h2>
+                    <button id="add-radar-btn" class="btn btn-primary btn-sm">
+                        <span>➕</span> Adicionar
+                    </button>
+                </div>
+
+                <div class="search-bar">
+                    <input type="text" id="search-radar" placeholder="Buscar por km ou descrição...">
+                    <button class="search-btn">🔍</button>
+                </div>
+
+                <div class="filter-chips">
+                    <button class="chip active" data-filter="all">Todos</button>
+                    <button class="chip" data-filter="conforme">Conformes</button>
+                    <button class="chip" data-filter="nao-conforme">Não Conformes</button>
+                    <button class="chip" data-filter="pendente">Pendentes</button>
+                </div>
+
+                <div id="radares-list" class="radares-list">
+                    <!-- Radar cards will be rendered here -->
+                </div>
+            </section>
+
+            <!-- Checklist View -->
+            <section id="view-checklist" class="view">
+                <div class="view-header">
+                    <h2>Checklists</h2>
+                </div>
+
+                <div id="checklist-list" class="checklist-list">
+                    <!-- Checklist items will be rendered here -->
+                </div>
+            </section>
+
+            <!-- Export View -->
+            <section id="view-export" class="view">
+                <div class="view-header">
+                    <h2>Exportar Dados</h2>
+                    <p class="subtitle">Exporte os dados para PDF ou Excel</p>
+                </div>
+
+                <div class="export-options">
+                    <div class="export-card" id="export-pdf">
+                        <div class="export-icon">📄</div>
+                        <h3>Exportar PDF</h3>
+                        <p>Relatório completo com fotos e status de cada radar</p>
+                        <button class="btn btn-primary">Gerar PDF</button>
+                    </div>
+
+                    <div class="export-card" id="export-excel">
+                        <div class="export-icon">📊</div>
+                        <h3>Exportar Excel</h3>
+                        <p>Planilha com todos os dados dos radares e checklists</p>
+                        <button class="btn btn-primary">Gerar Excel</button>
+                    </div>
+                </div>
+
+                <div class="export-preview">
+                    <h3>Prévia dos Dados</h3>
+                    <div id="export-table-container" class="table-container">
+                        <!-- Preview table will be rendered here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-view="dashboard">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">Dashboard</span>
+            </button>
+            <button class="nav-item" data-view="radares">
+                <span class="nav-icon">📡</span>
+                <span class="nav-label">Radares</span>
+            </button>
+            <button class="nav-item" data-view="checklist">
+                <span class="nav-icon">✅</span>
+                <span class="nav-label">Checklists</span>
+            </button>
+            <button class="nav-item" data-view="export">
+                <span class="nav-icon">📤</span>
+                <span class="nav-label">Exportar</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Modal: Radar Details -->
+    <div id="modal-radar" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-radar-title">Detalhes do Radar</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-radar-body">
+                <!-- Radar details will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add/Edit Radar -->
+    <div id="modal-add-radar" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Cadastrar Radar</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-radar">
+                    <div class="form-group">
+                        <label for="radar-km">Km</label>
+                        <input type="text" id="radar-km" placeholder="Ex: 45,3" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="radar-sentido">Sentido</label>
+                        <select id="radar-sentido" required>
+                            <option value="">Selecione...</option>
+                            <option value="Norte">Norte (Crescente)</option>
+                            <option value="Sul">Sul (Decrescente)</option>
+                            <option value="Ambos">Ambos</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="radar-velocidade">Velocidade (km/h)</label>
+                        <input type="number" id="radar-velocidade" placeholder="Ex: 80" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="radar-tipo-via">Tipo de Via</label>
+                        <select id="radar-tipo-via" required>
+                            <option value="">Selecione...</option>
+                            <option value="urbana">Via Urbana</option>
+                            <option value="rural-urbana">Via Rural com característica urbana</option>
+                            <option value="rural">Via Rural</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="radar-municipio">Município</label>
+                        <input type="text" id="radar-municipio" placeholder="Ex: Juiz de Fora">
+                    </div>
+                    <div class="form-group">
+                        <label for="radar-descricao">Descrição/Referência</label>
+                        <textarea id="radar-descricao" rows="2" placeholder="Ex: Próximo ao posto Shell"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Fotos</label>
+                        <div class="photo-upload">
+                            <button type="button" id="btn-take-photo" class="btn btn-outline">
+                                📷 Tirar Foto
+                            </button>
+                            <button type="button" id="btn-upload-photo" class="btn btn-outline">
+                                📁 Escolher Arquivo
+                            </button>
+                            <input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
+                        </div>
+                        <div id="photos-preview" class="photos-preview"></div>
+                    </div>
+                    <input type="hidden" id="radar-id">
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-outline modal-close">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Checklist -->
+    <div id="modal-checklist" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>Checklist de Sinalização</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="checklist-radar-info" class="checklist-radar-info">
+                    <!-- Radar info will be shown here -->
+                </div>
+
+                <div class="distance-info" id="distance-info">
+                    <!-- Distance calculation will be shown here -->
+                </div>
+
+                <form id="form-checklist">
+                    <div class="checklist-section">
+                        <h3>Placa R-19 (Fiscalização Eletrônica)</h3>
+                        <div class="checklist-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="placa-presente" id="check-placa-presente">
+                                <span class="checkmark"></span>
+                                Placa R-19 presente e visível
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="distancia-placa">Distância da placa ao radar (metros)</label>
+                            <input type="number" id="distancia-placa" placeholder="Ex: 450">
+                            <span id="distancia-status" class="field-status"></span>
+                        </div>
+                        <div class="checklist-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="placa-legivel" id="check-placa-legivel">
+                                <span class="checkmark"></span>
+                                Placa legível e em bom estado
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="checklist-section">
+                        <h3>Sinalização Complementar</h3>
+                        <div class="checklist-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="pintura-solo" id="check-pintura-solo">
+                                <span class="checkmark"></span>
+                                Pintura de solo adequada
+                            </label>
+                        </div>
+                        <div class="checklist-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="sem-obstrucao" id="check-sem-obstrucao">
+                                <span class="checkmark"></span>
+                                Sem obstruções visuais (vegetação, postes, etc.)
+                            </label>
+                        </div>
+                        <div class="checklist-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="placa-velocidade" id="check-placa-velocidade">
+                                <span class="checkmark"></span>
+                                Placa de velocidade regulamentada visível
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="checklist-section">
+                        <h3>Fotos da Verificação</h3>
+                        <div class="photo-upload">
+                            <button type="button" id="btn-checklist-photo" class="btn btn-outline">
+                                📷 Adicionar Foto
+                            </button>
+                            <input type="file" id="checklist-photo-input" accept="image/*" capture="environment" hidden>
+                        </div>
+                        <div id="checklist-photos-preview" class="photos-preview"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="checklist-obs">Observações</label>
+                        <textarea id="checklist-obs" rows="3" placeholder="Observações adicionais..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="checklist-status">Status Final</label>
+                        <select id="checklist-status" required>
+                            <option value="">Selecione...</option>
+                            <option value="conforme">✅ Conforme</option>
+                            <option value="nao-conforme">❌ Não Conforme</option>
+                            <option value="pendente">⏳ Pendente de Verificação</option>
+                        </select>
+                    </div>
+
+                    <input type="hidden" id="checklist-radar-id">
+                    <input type="hidden" id="checklist-id">
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-outline modal-close">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar Checklist</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="js/db.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/camera.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
