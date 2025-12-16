@@ -1,4 +1,4 @@
-const CACHE_NAME = 'radar-check-v3';
+const CACHE_NAME = 'radar-check-v4';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
