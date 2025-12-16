@@ -99,11 +99,11 @@ const app = {
             console.log('App initialized successfully');
         } catch (error) {
             console.error('Failed to initialize app:', error);
-            
+
             // Clear timeout and show app even on error
             clearTimeout(splashTimeout);
             hideSplash();
-            
+
             this.showToast('Erro ao inicializar. Verifique sua conexão.', 'error');
         }
     },
@@ -428,8 +428,14 @@ const app = {
      */
     async openRadarDetails(radarId) {
         try {
+            console.log('Opening radar details for ID:', radarId, 'type:', typeof radarId);
+
             const radar = await db.getRadar(radarId);
-            if (!radar) return;
+            if (!radar) {
+                console.error('Radar not found with ID:', radarId);
+                this.showToast('Radar não encontrado. Tente recarregar a página.', 'error');
+                return;
+            }
 
             const checklists = await db.getChecklistsByRadar(radarId);
             const lastChecklist = checklists.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
@@ -742,8 +748,11 @@ const app = {
      */
     async saveChecklist() {
         try {
+            // Note: radarId must be string to match Firebase document IDs
+            const radarIdValue = document.getElementById('checklist-radar-id').value;
+
             const checklistData = {
-                radarId: parseInt(document.getElementById('checklist-radar-id').value),
+                radarId: radarIdValue.toString(), // Keep as string, not parseInt
                 placaPresente: document.getElementById('check-placa-presente').checked,
                 distanciaPlaca: parseInt(document.getElementById('distancia-placa').value) || null,
                 placaLegivel: document.getElementById('check-placa-legivel').checked,
