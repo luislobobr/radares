@@ -13,6 +13,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <!-- SheetJS for Excel reading/writing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- jsPDF for PDF export -->
@@ -277,8 +280,8 @@
                         <label for="radar-sentido">Sentido</label>
                         <select id="radar-sentido" required>
                             <option value="">Selecione...</option>
-                            <option value="Norte">Norte (Crescente)</option>
-                            <option value="Sul">Sul (Decrescente)</option>
+                            <option value="Norte">Norte (Decrescente)</option>
+                            <option value="Sul">Sul (Crescente)</option>
                             <option value="Ambos">Ambos</option>
                         </select>
                     </div>
