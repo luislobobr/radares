@@ -150,13 +150,15 @@ const db = {
      */
     async getChecklists() {
         try {
-            const snapshot = await this.firestore.collection('checklists')
-                .orderBy('date', 'desc')
-                .get();
-            return snapshot.docs.map(doc => ({
+            // Note: Removed orderBy to avoid requiring Firestore index
+            // Sorting is done client-side instead
+            const snapshot = await this.firestore.collection('checklists').get();
+            const checklists = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
+            // Sort by date client-side
+            return checklists.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
         } catch (error) {
             console.error('Error getting checklists:', error);
             return [];
@@ -168,14 +170,16 @@ const db = {
      */
     async getChecklistsByRadar(radarId) {
         try {
+            // Note: Removed orderBy to avoid requiring composite index
             const snapshot = await this.firestore.collection('checklists')
                 .where('radarId', '==', radarId.toString())
-                .orderBy('date', 'desc')
                 .get();
-            return snapshot.docs.map(doc => ({
+            const checklists = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
+            // Sort by date client-side
+            return checklists.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
         } catch (error) {
             console.error('Error getting checklists by radar:', error);
             return [];
@@ -246,15 +250,18 @@ const db = {
      */
     async getRecentActivity(limit = 5) {
         try {
-            const snapshot = await this.firestore.collection('checklists')
-                .orderBy('date', 'desc')
-                .limit(limit)
-                .get();
+            // Note: Get all checklists and sort/limit client-side to avoid index requirement
+            const snapshot = await this.firestore.collection('checklists').get();
 
-            const checklists = snapshot.docs.map(doc => ({
+            let checklists = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
+
+            // Sort by date and limit client-side
+            checklists = checklists
+                .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+                .slice(0, limit);
 
             const radares = await this.getRadares();
 
