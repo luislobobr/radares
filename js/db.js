@@ -1,317 +1,333 @@
 /**
- * IndexedDB Database Manager
- * Handles offline storage for radars and checklists
+ * Firebase Database Module
+ * Replaces IndexedDB with Firebase Firestore for cloud sync
+ * Includes offline persistence
  */
 
-const DB_NAME = 'RadarCheckDB';
-const DB_VERSION = 1;
+// Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyBrEfbmlcr_a4H9owwOaKjcrjcKBt0Pboo",
+    authDomain: "radar-check-br040.firebaseapp.com",
+    projectId: "radar-check-br040",
+    storageBucket: "radar-check-br040.firebasestorage.app",
+    messagingSenderId: "733218983742",
+    appId: "1:733218983742:web:1e02de9b4f07608e0da66f"
+};
 
+// Database module
 const db = {
-    instance: null,
+    firestore: null,
+    isOnline: navigator.onLine,
 
     /**
-     * Initialize the database
+     * Initialize Firebase and Firestore
      */
     async init() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
+        try {
+            // Initialize Firebase
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
 
-            request.onerror = () => {
-                console.error('Failed to open database:', request.error);
-                reject(request.error);
-            };
+            // Get Firestore instance
+            this.firestore = firebase.firestore();
 
-            request.onsuccess = () => {
-                this.instance = request.result;
-                console.log('Database initialized successfully');
-                resolve(this.instance);
-            };
-
-            request.onupgradeneeded = (event) => {
-                const database = event.target.result;
-
-                // Create radares store
-                if (!database.objectStoreNames.contains('radares')) {
-                    const radaresStore = database.createObjectStore('radares', { 
-                        keyPath: 'id', 
-                        autoIncrement: true 
-                    });
-                    radaresStore.createIndex('km', 'km', { unique: false });
-                    radaresStore.createIndex('status', 'status', { unique: false });
-                    radaresStore.createIndex('createdAt', 'createdAt', { unique: false });
+            // Enable offline persistence
+            try {
+                await this.firestore.enablePersistence({ synchronizeTabs: true });
+                console.log('Firestore offline persistence enabled');
+            } catch (err) {
+                if (err.code === 'failed-precondition') {
+                    console.warn('Persistence failed: Multiple tabs open');
+                } else if (err.code === 'unimplemented') {
+                    console.warn('Persistence not available in this browser');
                 }
+            }
 
-                // Create checklists store
-                if (!database.objectStoreNames.contains('checklists')) {
-                    const checklistsStore = database.createObjectStore('checklists', { 
-                        keyPath: 'id', 
-                        autoIncrement: true 
-                    });
-                    checklistsStore.createIndex('radarId', 'radarId', { unique: false });
-                    checklistsStore.createIndex('date', 'date', { unique: false });
-                    checklistsStore.createIndex('status', 'status', { unique: false });
-                }
+            // Listen to online/offline status
+            window.addEventListener('online', () => {
+                this.isOnline = true;
+                console.log('App is online');
+            });
+            window.addEventListener('offline', () => {
+                this.isOnline = false;
+                console.log('App is offline');
+            });
 
-                console.log('Database schema created');
-            };
-        });
+            console.log('Firebase initialized successfully');
+            return true;
+        } catch (error) {
+            console.error('Error initializing Firebase:', error);
+            throw error;
+        }
     },
 
     /**
-     * Get all radars
+     * Get all radares
      */
     async getRadares() {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['radares'], 'readonly');
-            const store = transaction.objectStore('radares');
-            const request = store.getAll();
-
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
+        try {
+            const snapshot = await this.firestore.collection('radares').get();
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting radares:', error);
+            return [];
+        }
     },
 
     /**
-     * Get a single radar by ID
+     * Get a specific radar
      */
     async getRadar(id) {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['radares'], 'readonly');
-            const store = transaction.objectStore('radares');
-            const request = store.get(id);
-
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
+        try {
+            const doc = await this.firestore.collection('radares').doc(id.toString()).get();
+            if (doc.exists) {
+                return { id: doc.id, ...doc.data() };
+            }
+            return null;
+        } catch (error) {
+            console.error('Error getting radar:', error);
+            return null;
+        }
     },
 
     /**
-     * Add or update a radar
+     * Save a radar
      */
     async saveRadar(radar) {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['radares'], 'readwrite');
-            const store = transaction.objectStore('radares');
-
+        try {
             // Add timestamps
             if (!radar.id) {
                 radar.createdAt = new Date().toISOString();
             }
             radar.updatedAt = new Date().toISOString();
+            radar.status = radar.status || 'pendente';
 
-            // If no status, set as pending
-            if (!radar.status) {
-                radar.status = 'pendente';
+            if (radar.id) {
+                // Update existing
+                await this.firestore.collection('radares').doc(radar.id.toString()).set(radar, { merge: true });
+            } else {
+                // Create new
+                const docRef = await this.firestore.collection('radares').add(radar);
+                radar.id = docRef.id;
             }
 
-            const request = radar.id ? store.put(radar) : store.add(radar);
-
-            request.onsuccess = () => {
-                radar.id = request.result;
-                resolve(radar);
-            };
-            request.onerror = () => reject(request.error);
-        });
+            return radar;
+        } catch (error) {
+            console.error('Error saving radar:', error);
+            throw error;
+        }
     },
 
     /**
      * Delete a radar
      */
     async deleteRadar(id) {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['radares'], 'readwrite');
-            const store = transaction.objectStore('radares');
-            const request = store.delete(id);
+        try {
+            await this.firestore.collection('radares').doc(id.toString()).delete();
 
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
+            // Also delete related checklists
+            const checklists = await this.firestore.collection('checklists')
+                .where('radarId', '==', id.toString())
+                .get();
+
+            const batch = this.firestore.batch();
+            checklists.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+
+            return true;
+        } catch (error) {
+            console.error('Error deleting radar:', error);
+            throw error;
+        }
     },
 
     /**
      * Get all checklists
      */
     async getChecklists() {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['checklists'], 'readonly');
-            const store = transaction.objectStore('checklists');
-            const request = store.getAll();
-
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
+        try {
+            const snapshot = await this.firestore.collection('checklists')
+                .orderBy('date', 'desc')
+                .get();
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting checklists:', error);
+            return [];
+        }
     },
 
     /**
      * Get checklists for a specific radar
      */
     async getChecklistsByRadar(radarId) {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['checklists'], 'readonly');
-            const store = transaction.objectStore('checklists');
-            const index = store.index('radarId');
-            const request = index.getAll(radarId);
-
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-    },
-
-    /**
-     * Get a single checklist by ID
-     */
-    async getChecklist(id) {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['checklists'], 'readonly');
-            const store = transaction.objectStore('checklists');
-            const request = store.get(id);
-
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
+        try {
+            const snapshot = await this.firestore.collection('checklists')
+                .where('radarId', '==', radarId.toString())
+                .orderBy('date', 'desc')
+                .get();
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting checklists by radar:', error);
+            return [];
+        }
     },
 
     /**
      * Save a checklist and update radar status
      */
     async saveChecklist(checklist) {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const transaction = this.instance.transaction(['checklists', 'radares'], 'readwrite');
-                const checklistStore = transaction.objectStore('checklists');
-                const radaresStore = transaction.objectStore('radares');
-
-                // Add timestamps
-                if (!checklist.id) {
-                    checklist.createdAt = new Date().toISOString();
-                }
-                checklist.updatedAt = new Date().toISOString();
-                checklist.date = checklist.date || new Date().toISOString();
-
-                // Save checklist
-                const request = checklist.id ? checklistStore.put(checklist) : checklistStore.add(checklist);
-
-                request.onsuccess = async () => {
-                    checklist.id = request.result;
-
-                    // Update radar status
-                    if (checklist.radarId && checklist.status) {
-                        const radarRequest = radaresStore.get(checklist.radarId);
-                        radarRequest.onsuccess = () => {
-                            const radar = radarRequest.result;
-                            if (radar) {
-                                radar.status = checklist.status;
-                                radar.lastChecklistDate = checklist.date;
-                                radar.updatedAt = new Date().toISOString();
-                                radaresStore.put(radar);
-                            }
-                        };
-                    }
-
-                    resolve(checklist);
-                };
-
-                request.onerror = () => reject(request.error);
-            } catch (error) {
-                reject(error);
+        try {
+            // Add timestamps
+            if (!checklist.id) {
+                checklist.createdAt = new Date().toISOString();
             }
-        });
-    },
+            checklist.updatedAt = new Date().toISOString();
+            checklist.date = checklist.date || new Date().toISOString();
 
-    /**
-     * Delete a checklist
-     */
-    async deleteChecklist(id) {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['checklists'], 'readwrite');
-            const store = transaction.objectStore('checklists');
-            const request = store.delete(id);
+            // Ensure radarId is string
+            checklist.radarId = checklist.radarId.toString();
 
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
-    },
-
-    /**
-     * Import radars from Excel data
-     */
-    async importRadares(radares) {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const transaction = this.instance.transaction(['radares'], 'readwrite');
-                const store = transaction.objectStore('radares');
-                let importedCount = 0;
-
-                for (const radar of radares) {
-                    radar.createdAt = new Date().toISOString();
-                    radar.updatedAt = new Date().toISOString();
-                    radar.status = radar.status || 'pendente';
-                    radar.rodovia = radar.rodovia || 'BR-040';
-
-                    await new Promise((res, rej) => {
-                        const request = store.add(radar);
-                        request.onsuccess = () => {
-                            importedCount++;
-                            res();
-                        };
-                        request.onerror = () => rej(request.error);
-                    });
-                }
-
-                resolve(importedCount);
-            } catch (error) {
-                reject(error);
+            if (checklist.id) {
+                await this.firestore.collection('checklists').doc(checklist.id.toString()).set(checklist, { merge: true });
+            } else {
+                const docRef = await this.firestore.collection('checklists').add(checklist);
+                checklist.id = docRef.id;
             }
-        });
-    },
 
-    /**
-     * Clear all radares
-     */
-    async clearRadares() {
-        return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction(['radares'], 'readwrite');
-            const store = transaction.objectStore('radares');
-            const request = store.clear();
+            // Update radar status
+            if (checklist.radarId && checklist.status) {
+                await this.firestore.collection('radares').doc(checklist.radarId).update({
+                    status: checklist.status,
+                    lastChecklistDate: checklist.date,
+                    updatedAt: new Date().toISOString()
+                });
+            }
 
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
+            return checklist;
+        } catch (error) {
+            console.error('Error saving checklist:', error);
+            throw error;
+        }
     },
 
     /**
      * Get statistics
      */
     async getStats() {
-        const radares = await this.getRadares();
-        const checklists = await this.getChecklists();
+        try {
+            const radares = await this.getRadares();
 
-        return {
-            total: radares.length,
-            conformes: radares.filter(r => r.status === 'conforme').length,
-            naoConformes: radares.filter(r => r.status === 'nao-conforme').length,
-            pendentes: radares.filter(r => r.status === 'pendente').length,
-            totalChecklists: checklists.length,
-            recentChecklists: checklists
-                .sort((a, b) => new Date(b.date) - new Date(a.date))
-                .slice(0, 5)
-        };
+            return {
+                total: radares.length,
+                conformes: radares.filter(r => r.status === 'conforme').length,
+                naoConformes: radares.filter(r => r.status === 'nao-conforme').length,
+                pendentes: radares.filter(r => r.status === 'pendente' || !r.status).length
+            };
+        } catch (error) {
+            console.error('Error getting stats:', error);
+            return { total: 0, conformes: 0, naoConformes: 0, pendentes: 0 };
+        }
     },
 
     /**
-     * Export all data for backup/export
+     * Get recent activity
      */
-    async exportAllData() {
-        const radares = await this.getRadares();
-        const checklists = await this.getChecklists();
+    async getRecentActivity(limit = 5) {
+        try {
+            const snapshot = await this.firestore.collection('checklists')
+                .orderBy('date', 'desc')
+                .limit(limit)
+                .get();
 
-        return {
-            exportDate: new Date().toISOString(),
-            radares,
-            checklists
-        };
+            const checklists = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            const radares = await this.getRadares();
+
+            return checklists.map(c => {
+                const radar = radares.find(r => r.id === c.radarId);
+                return {
+                    ...c,
+                    radarKm: radar?.km || 'N/A'
+                };
+            });
+        } catch (error) {
+            console.error('Error getting recent activity:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Import radares from array (bulk insert)
+     */
+    async importRadares(radaresArray) {
+        try {
+            const batch = this.firestore.batch();
+            let count = 0;
+
+            for (const radar of radaresArray) {
+                radar.createdAt = new Date().toISOString();
+                radar.updatedAt = new Date().toISOString();
+                radar.status = radar.status || 'pendente';
+
+                const docRef = this.firestore.collection('radares').doc();
+                batch.set(docRef, radar);
+                count++;
+
+                // Firestore batch limit is 500
+                if (count >= 450) {
+                    await batch.commit();
+                    count = 0;
+                }
+            }
+
+            if (count > 0) {
+                await batch.commit();
+            }
+
+            return radaresArray.length;
+        } catch (error) {
+            console.error('Error importing radares:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Clear all data (for testing)
+     */
+    async clearAll() {
+        try {
+            // Delete all radares
+            const radares = await this.firestore.collection('radares').get();
+            const batch1 = this.firestore.batch();
+            radares.forEach(doc => batch1.delete(doc.ref));
+            await batch1.commit();
+
+            // Delete all checklists
+            const checklists = await this.firestore.collection('checklists').get();
+            const batch2 = this.firestore.batch();
+            checklists.forEach(doc => batch2.delete(doc.ref));
+            await batch2.commit();
+
+            return true;
+        } catch (error) {
+            console.error('Error clearing data:', error);
+            throw error;
+        }
     }
 };
 
-// Export for use in other modules
+// Export for use
 window.db = db;
