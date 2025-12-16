@@ -342,7 +342,7 @@ const app = {
         // Add click handlers
         container.querySelectorAll('.radar-card').forEach(card => {
             card.addEventListener('click', () => {
-                const id = parseInt(card.dataset.id);
+                const id = card.dataset.id;
                 this.openRadarDetails(id);
             });
         });
@@ -459,13 +459,13 @@ const app = {
                     </div>
 
                     <div class="detail-actions">
-                        <button class="btn btn-primary" onclick="app.openChecklistModal(${radar.id})">
+                        <button class="btn btn-primary" onclick="app.openChecklistModal('${radar.id}')">
                             ✅ Fazer Checklist
                         </button>
-                        <button class="btn btn-outline" onclick="app.editRadar(${radar.id})">
+                        <button class="btn btn-outline" onclick="app.editRadar('${radar.id}')">
                             ✏️ Editar
                         </button>
-                        <button class="btn btn-danger" onclick="app.deleteRadar(${radar.id})">
+                        <button class="btn btn-danger" onclick="app.deleteRadar('${radar.id}')">
                             🗑️ Excluir
                         </button>
                     </div>
