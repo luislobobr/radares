@@ -226,16 +226,18 @@ const db = {
     async getStats() {
         try {
             const radares = await this.getRadares();
+            const recentChecklists = await this.getRecentActivity(5);
 
             return {
                 total: radares.length,
                 conformes: radares.filter(r => r.status === 'conforme').length,
                 naoConformes: radares.filter(r => r.status === 'nao-conforme').length,
-                pendentes: radares.filter(r => r.status === 'pendente' || !r.status).length
+                pendentes: radares.filter(r => r.status === 'pendente' || !r.status).length,
+                recentChecklists: recentChecklists
             };
         } catch (error) {
             console.error('Error getting stats:', error);
-            return { total: 0, conformes: 0, naoConformes: 0, pendentes: 0 };
+            return { total: 0, conformes: 0, naoConformes: 0, pendentes: 0, recentChecklists: [] };
         }
     },
 
