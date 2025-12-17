@@ -19,7 +19,8 @@ const camera = {
 
         // Photo input for checklist form
         const checklistPhotoInput = document.getElementById('checklist-photo-input');
-        const btnChecklistPhoto = document.getElementById('btn-checklist-photo');
+        const btnChecklistCamera = document.getElementById('btn-checklist-camera');
+        const btnChecklistGallery = document.getElementById('btn-checklist-gallery');
         const checklistPhotosPreview = document.getElementById('checklist-photos-preview');
 
         // Radar form photo handlers
@@ -43,9 +44,18 @@ const camera = {
             });
         }
 
-        // Checklist form photo handlers
-        if (btnChecklistPhoto) {
-            btnChecklistPhoto.addEventListener('click', () => {
+        // Checklist form photo handlers - Camera button
+        if (btnChecklistCamera) {
+            btnChecklistCamera.addEventListener('click', () => {
+                checklistPhotoInput.setAttribute('capture', 'environment');
+                checklistPhotoInput.click();
+            });
+        }
+
+        // Checklist form photo handlers - Gallery button
+        if (btnChecklistGallery) {
+            btnChecklistGallery.addEventListener('click', () => {
+                checklistPhotoInput.removeAttribute('capture');
                 checklistPhotoInput.click();
             });
         }
