@@ -313,9 +313,9 @@
                                 📷 Tirar Foto
                             </button>
                             <button type="button" id="btn-upload-photo" class="btn btn-outline">
-                                📁 Escolher Arquivo
+                                📁 Escolher Arquivos
                             </button>
-                            <input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
+                            <input type="file" id="photo-input" accept="image/*" multiple hidden>
                         </div>
                         <div id="photos-preview" class="photos-preview"></div>
                     </div>
@@ -397,10 +397,13 @@
                     <div class="checklist-section">
                         <h3>Fotos da Verificação</h3>
                         <div class="photo-upload">
-                            <button type="button" id="btn-checklist-photo" class="btn btn-outline">
-                                📷 Adicionar Foto
+                            <button type="button" id="btn-checklist-camera" class="btn btn-outline">
+                                📷 Tirar Foto
                             </button>
-                            <input type="file" id="checklist-photo-input" accept="image/*" capture="environment" hidden>
+                            <button type="button" id="btn-checklist-gallery" class="btn btn-outline">
+                                🖼️ Escolher da Galeria
+                            </button>
+                            <input type="file" id="checklist-photo-input" accept="image/*" multiple hidden>
                         </div>
                         <div id="checklist-photos-preview" class="photos-preview"></div>
                     </div>
