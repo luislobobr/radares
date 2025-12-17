@@ -104,22 +104,24 @@ const camera = {
     },
 
     /**
-     * Convert file to base64
+     * Convert file to base64 with heavy compression for Firestore
+     * Firestore has a 1MB document limit, so we need small images
      */
     fileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
 
             reader.onload = () => {
-                // Compress image if too large
+                // Compress image significantly for Firestore storage
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
 
-                    // Max dimensions
-                    const maxWidth = 1200;
-                    const maxHeight = 1200;
+                    // Reduced max dimensions to allow multiple photos
+                    // ~50-80KB per photo allows 10+ photos per document
+                    const maxWidth = 800;
+                    const maxHeight = 800;
 
                     let width = img.width;
                     let height = img.height;
@@ -135,8 +137,8 @@ const camera = {
                     canvas.height = height;
                     ctx.drawImage(img, 0, 0, width, height);
 
-                    // Get compressed base64
-                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                    // Get compressed base64 with lower quality (0.5 instead of 0.7)
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
                     resolve(compressedBase64);
                 };
                 img.onerror = reject;
