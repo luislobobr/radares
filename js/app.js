@@ -705,6 +705,9 @@ const app = {
             document.getElementById('checklist-radar-id').value = radarId;
             document.getElementById('distancia-status').textContent = '';
 
+            // Reset editing state (we're creating a new checklist)
+            this.editingChecklistId = null;
+
             document.getElementById('modal-checklist').classList.add('open');
         } catch (error) {
             console.error('Error opening checklist:', error);
@@ -764,10 +767,21 @@ const app = {
                 photos: camera.getPhotos('checklist')
             };
 
+            // If editing, include the checklist ID
+            if (this.editingChecklistId) {
+                checklistData.id = this.editingChecklistId;
+            }
+
             await db.saveChecklist(checklistData);
 
+            // Store the edit state before resetting for the toast message
+            const wasEditing = !!this.editingChecklistId;
+
+            // Reset editing state
+            this.editingChecklistId = null;
+
             this.closeAllModals();
-            this.showToast('Checklist salvo!', 'success');
+            this.showToast(wasEditing ? 'Checklist atualizado!' : 'Checklist salvo!', 'success');
 
             this.loadDashboard();
             if (this.currentView === 'radares') {
@@ -820,8 +834,191 @@ const app = {
                     </div>
                 `;
             }).join('');
+
+            // Add click handlers for checklist cards
+            container.querySelectorAll('.checklist-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const id = card.dataset.id;
+                    this.openChecklistDetails(id);
+                });
+            });
         } catch (error) {
             console.error('Error loading checklists:', error);
+        }
+    },
+
+    /**
+     * Open checklist details modal
+     */
+    async openChecklistDetails(checklistId) {
+        try {
+            const checklist = await db.getChecklist(checklistId);
+            if (!checklist) {
+                this.showToast('Checklist não encontrado', 'error');
+                return;
+            }
+
+            const radar = await db.getRadar(checklist.radarId);
+
+            const modal = document.getElementById('modal-radar');
+            const body = document.getElementById('modal-radar-body');
+            document.getElementById('modal-radar-title').textContent = `Checklist - Km ${radar?.km || 'N/A'}`;
+
+            body.innerHTML = `
+                <div class="checklist-details">
+                    <div class="detail-status" style="margin-bottom: var(--space-lg);">
+                        <label>Status</label>
+                        <span class="radar-status-badge ${checklist.status}">${this.getStatusLabel(checklist.status)}</span>
+                        <small>Realizado em: ${this.formatDate(checklist.date)}</small>
+                    </div>
+
+                    ${checklist.photos && checklist.photos.length > 0 ? `
+                        <div class="radar-photos-carousel" style="margin-bottom: var(--space-lg);">
+                            ${checklist.photos.map((photo, i) => `
+                                <img src="${photo.data}" alt="Foto ${i + 1}" class="radar-detail-photo">
+                            `).join('')}
+                        </div>
+                    ` : ''}
+
+                    <div class="checklist-section">
+                        <h3>Verificações Realizadas</h3>
+                        <div class="check-list" style="display: flex; flex-direction: column; gap: var(--space-sm);">
+                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
+                                <span>${checklist.placaPresente ? '✅' : '❌'}</span>
+                                <span>Placa R-19 presente e visível</span>
+                            </div>
+                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
+                                <span>${checklist.placaLegivel ? '✅' : '❌'}</span>
+                                <span>Placa legível e em bom estado</span>
+                            </div>
+                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
+                                <span>${checklist.pinturaSolo ? '✅' : '❌'}</span>
+                                <span>Pintura de solo adequada</span>
+                            </div>
+                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
+                                <span>${checklist.semObstrucao ? '✅' : '❌'}</span>
+                                <span>Sem obstruções visuais</span>
+                            </div>
+                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
+                                <span>${checklist.placaVelocidade ? '✅' : '❌'}</span>
+                                <span>Placa de velocidade visível</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="detail-grid" style="margin-top: var(--space-lg);">
+                        <div class="detail-item">
+                            <label>Distância da Placa</label>
+                            <span>${checklist.distanciaPlaca || 'N/A'} m</span>
+                        </div>
+                    </div>
+
+                    ${checklist.observacoes ? `
+                        <div class="detail-description" style="margin-top: var(--space-lg);">
+                            <label>Observações</label>
+                            <p style="white-space: pre-wrap;">${checklist.observacoes}</p>
+                        </div>
+                    ` : ''}
+
+                    <div class="detail-actions" style="margin-top: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-sm);">
+                        <button class="btn btn-primary" onclick="app.editChecklist('${checklist.id}')">
+                            ✏️ Editar Checklist
+                        </button>
+                        <button class="btn btn-danger" onclick="app.deleteChecklist('${checklist.id}')">
+                            🗑️ Excluir Checklist
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            modal.classList.add('open');
+        } catch (error) {
+            console.error('Error opening checklist details:', error);
+            this.showToast('Erro ao abrir detalhes do checklist', 'error');
+        }
+    },
+
+    /**
+     * Edit an existing checklist
+     */
+    async editChecklist(checklistId) {
+        try {
+            const checklist = await db.getChecklist(checklistId);
+            if (!checklist) {
+                this.showToast('Checklist não encontrado', 'error');
+                return;
+            }
+
+            const radar = await db.getRadar(checklist.radarId);
+            if (!radar) {
+                this.showToast('Radar associado não encontrado', 'error');
+                return;
+            }
+
+            this.closeAllModals();
+
+            // Set radar info
+            const radarInfo = document.getElementById('checklist-radar-info');
+            radarInfo.innerHTML = `
+                <strong>Km ${radar.km} - BR-040</strong><br>
+                <small>Velocidade: ${radar.velocidade} km/h | Tipo: ${this.getTipoViaLabel(radar.tipoVia)}</small>
+            `;
+
+            // Set distance info
+            const distanceInfo = document.getElementById('distance-info');
+            distanceInfo.innerHTML = `
+                <strong>Intervalo de distância permitido:</strong><br>
+                ${this.getDistanceRange(radar.velocidade, radar.tipoVia)}
+            `;
+
+            // Store velocity and road type for validation
+            distanceInfo.dataset.velocidade = radar.velocidade;
+            distanceInfo.dataset.tipoVia = radar.tipoVia;
+
+            // Fill form with existing data
+            document.getElementById('checklist-radar-id').value = checklist.radarId;
+            document.getElementById('check-placa-presente').checked = checklist.placaPresente || false;
+            document.getElementById('distancia-placa').value = checklist.distanciaPlaca || '';
+            document.getElementById('check-placa-legivel').checked = checklist.placaLegivel || false;
+            document.getElementById('check-pintura-solo').checked = checklist.pinturaSolo || false;
+            document.getElementById('check-sem-obstrucao').checked = checklist.semObstrucao || false;
+            document.getElementById('check-placa-velocidade').checked = checklist.placaVelocidade || false;
+            document.getElementById('checklist-obs').value = checklist.observacoes || '';
+            document.getElementById('checklist-status').value = checklist.status || '';
+
+            // Set photos
+            camera.setPhotos(checklist.photos || [], 'checklist');
+
+            // Track that we're editing
+            this.editingChecklistId = checklist.id;
+
+            // Validate distance
+            this.validateDistance();
+
+            document.getElementById('modal-checklist').classList.add('open');
+        } catch (error) {
+            console.error('Error editing checklist:', error);
+            this.showToast('Erro ao editar checklist', 'error');
+        }
+    },
+
+    /**
+     * Delete a checklist
+     */
+    async deleteChecklist(checklistId) {
+        if (!confirm('Tem certeza que deseja excluir este checklist?')) return;
+
+        try {
+            await db.deleteChecklist(checklistId);
+            this.closeAllModals();
+            this.showToast('Checklist excluído!', 'success');
+            this.loadDashboard();
+            if (this.currentView === 'checklist') {
+                this.loadChecklists();
+            }
+        } catch (error) {
+            console.error('Error deleting checklist:', error);
+            this.showToast('Erro ao excluir checklist', 'error');
         }
     },
 
