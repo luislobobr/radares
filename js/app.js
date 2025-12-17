@@ -347,7 +347,7 @@ const app = {
         container.innerHTML = radares.map(radar => `
             <div class="radar-card" data-id="${radar.id}">
                 <div class="radar-card-header">
-                    <span class="radar-km">Km ${radar.km}</span>
+                    <span class="radar-km">Km ${radar.km}${radar.sentido ? ' - ' + radar.sentido : ''}</span>
                     <span class="radar-status-badge ${radar.status}">${this.getStatusLabel(radar.status)}</span>
                 </div>
                 <div class="radar-card-body">
