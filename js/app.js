@@ -818,7 +818,7 @@ const app = {
                 return `
                     <div class="checklist-card" data-id="${checklist.id}">
                         <div class="radar-card-header">
-                            <span class="radar-km">Km ${radar?.km || 'N/A'}</span>
+                            <span class="radar-km">Km ${radar?.km || 'N/A'}${radar?.sentido ? ' - ' + radar.sentido : ''}</span>
                             <span class="radar-status-badge ${checklist.status}">${this.getStatusLabel(checklist.status)}</span>
                         </div>
                         <div class="radar-info" style="margin-top: var(--space-sm);">
