@@ -187,6 +187,35 @@ const db = {
     },
 
     /**
+     * Get a specific checklist by ID
+     */
+    async getChecklist(id) {
+        try {
+            const doc = await this.firestore.collection('checklists').doc(id.toString()).get();
+            if (doc.exists) {
+                return { id: doc.id, ...doc.data() };
+            }
+            return null;
+        } catch (error) {
+            console.error('Error getting checklist:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Delete a checklist
+     */
+    async deleteChecklist(id) {
+        try {
+            await this.firestore.collection('checklists').doc(id.toString()).delete();
+            return true;
+        } catch (error) {
+            console.error('Error deleting checklist:', error);
+            throw error;
+        }
+    },
+
+    /**
      * Save a checklist and update radar status
      */
     async saveChecklist(checklist) {
