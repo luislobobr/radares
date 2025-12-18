@@ -286,6 +286,8 @@ const app = {
             document.getElementById('stat-conformes').textContent = stats.conformes;
             document.getElementById('stat-nao-conformes').textContent = stats.naoConformes;
             document.getElementById('stat-pendentes').textContent = stats.pendentes;
+            document.getElementById('stat-per').textContent = stats.totalPer;
+            document.getElementById('stat-educativo').textContent = stats.totalEducativo;
 
             // Render recent activity
             const recentList = document.getElementById('recent-list');
@@ -347,7 +349,10 @@ const app = {
         container.innerHTML = radares.map(radar => `
             <div class="radar-card" data-id="${radar.id}">
                 <div class="radar-card-header">
-                    <span class="radar-km">Km ${radar.km}${radar.sentido ? ' - ' + radar.sentido : ''}</span>
+                    <div class="radar-title-row">
+                        <span class="radar-km">Km ${radar.km}${radar.sentido ? ' - ' + radar.sentido : ''}</span>
+                        ${radar.tipo ? `<span class="radar-type-badge ${radar.tipo}">${radar.tipo === 'per' ? '🚨 PER' : '📚 EDU'}</span>` : ''}
+                    </div>
                     <span class="radar-status-badge ${radar.status}">${this.getStatusLabel(radar.status)}</span>
                 </div>
                 ${radar.lastChecklistDate ? `
@@ -478,6 +483,10 @@ const app = {
                             <span>${radar.velocidade} km/h</span>
                         </div>
                         <div class="detail-item">
+                            <label>Tipo do Radar</label>
+                            <span class="radar-type-badge ${radar.tipo || ''}">${radar.tipo === 'per' ? '🚨 PER' : radar.tipo === 'educativo' ? '📚 Educativo' : 'N/A'}</span>
+                        </div>
+                        <div class="detail-item">
                             <label>Tipo de Via</label>
                             <span>${this.getTipoViaLabel(radar.tipoVia)}</span>
                         </div>
@@ -605,6 +614,7 @@ const app = {
             document.getElementById('radar-km').value = radar.km;
             document.getElementById('radar-sentido').value = radar.sentido || '';
             document.getElementById('radar-velocidade').value = radar.velocidade;
+            document.getElementById('radar-tipo').value = radar.tipo || '';
             document.getElementById('radar-tipo-via').value = radar.tipoVia || '';
             document.getElementById('radar-municipio').value = radar.municipio || '';
             document.getElementById('radar-descricao').value = radar.descricao || '';
@@ -629,6 +639,7 @@ const app = {
                 km: document.getElementById('radar-km').value.trim(),
                 sentido: document.getElementById('radar-sentido').value,
                 velocidade: parseInt(document.getElementById('radar-velocidade').value),
+                tipo: document.getElementById('radar-tipo').value,
                 tipoVia: document.getElementById('radar-tipo-via').value,
                 municipio: document.getElementById('radar-municipio').value.trim(),
                 descricao: document.getElementById('radar-descricao').value.trim(),

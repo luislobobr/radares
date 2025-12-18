@@ -266,6 +266,8 @@ const db = {
                 conformes: radares.filter(r => r.status === 'conforme').length,
                 naoConformes: radares.filter(r => r.status === 'nao-conforme').length,
                 pendentes: radares.filter(r => r.status === 'pendente' || !r.status).length,
+                totalPer: radares.filter(r => r.tipo === 'per').length,
+                totalEducativo: radares.filter(r => r.tipo === 'educativo').length,
                 recentChecklists: recentChecklists
             };
         } catch (error) {
