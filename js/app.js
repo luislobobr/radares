@@ -411,15 +411,20 @@ const app = {
     },
 
     /**
-     * Filter radares by status
+     * Filter radares by status or tipo
      */
-    async filterByStatus(status) {
+    async filterByStatus(filter) {
         const radares = await db.getRadares();
 
-        if (status === 'all') {
+        if (filter === 'all') {
             this.renderRadares(radares);
+        } else if (filter === 'per' || filter === 'educativo') {
+            // Filter by tipo
+            const filtered = radares.filter(r => r.tipo === filter);
+            this.renderRadares(filtered);
         } else {
-            const filtered = radares.filter(r => r.status === status);
+            // Filter by status
+            const filtered = radares.filter(r => r.status === filter);
             this.renderRadares(filtered);
         }
     },
