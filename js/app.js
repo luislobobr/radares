@@ -350,6 +350,12 @@ const app = {
                     <span class="radar-km">Km ${radar.km}${radar.sentido ? ' - ' + radar.sentido : ''}</span>
                     <span class="radar-status-badge ${radar.status}">${this.getStatusLabel(radar.status)}</span>
                 </div>
+                ${radar.lastChecklistDate ? `
+                    <div class="radar-checklist-badge">
+                        <span class="checklist-icon">✅</span>
+                        <span class="checklist-label">Verificado em ${this.formatDate(radar.lastChecklistDate)}</span>
+                    </div>
+                ` : ''}
                 <div class="radar-card-body">
                     <div class="radar-thumb">
                         ${radar.photos && radar.photos.length > 0
