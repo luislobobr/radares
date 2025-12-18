@@ -220,24 +220,45 @@
                     <p class="subtitle">Exporte os dados para PDF ou Excel</p>
                 </div>
 
+                <div class="export-filters">
+                    <h3>Filtros de Exportação</h3>
+                    <div class="filter-row">
+                        <div class="form-group">
+                            <label for="export-filter-tipo">Tipo do Radar</label>
+                            <select id="export-filter-tipo">
+                                <option value="all">Todos</option>
+                                <option value="per">🚨 PER</option>
+                                <option value="educativo">📚 Educativo</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="export-filter-radar">Radar Específico</label>
+                            <select id="export-filter-radar">
+                                <option value="all">Todos os Radares</option>
+                                <!-- Options will be populated dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="export-options">
                     <div class="export-card" id="export-pdf">
                         <div class="export-icon">📄</div>
                         <h3>Exportar PDF</h3>
-                        <p>Relatório completo com fotos e status de cada radar</p>
+                        <p>Relatório completo com fotos e status</p>
                         <button class="btn btn-primary">Gerar PDF</button>
                     </div>
 
                     <div class="export-card" id="export-excel">
                         <div class="export-icon">📊</div>
                         <h3>Exportar Excel</h3>
-                        <p>Planilha com todos os dados dos radares e checklists</p>
+                        <p>Planilha com dados dos radares</p>
                         <button class="btn btn-primary">Gerar Excel</button>
                     </div>
                 </div>
 
                 <div class="export-preview">
-                    <h3>Prévia dos Dados</h3>
+                    <h3>Prévia dos Dados <span id="export-count"></span></h3>
                     <div id="export-table-container" class="table-container">
                         <!-- Preview table will be rendered here -->
                     </div>
