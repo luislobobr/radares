@@ -675,6 +675,28 @@ body {
     color: var(--warning);
 }
 
+/* Checklist completion badge on radar cards */
+.radar-checklist-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: rgba(16, 185, 129, 0.15);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-sm);
+    border-left: 3px solid var(--success);
+}
+
+.radar-checklist-badge .checklist-icon {
+    font-size: var(--font-size-sm);
+}
+
+.radar-checklist-badge .checklist-label {
+    font-size: var(--font-size-xs);
+    color: var(--success);
+    font-weight: 500;
+}
+
 .radar-card-body {
     display: flex;
     gap: var(--space-md);
