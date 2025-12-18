@@ -207,6 +207,15 @@ const app = {
             this.exportToExcel();
         });
 
+        // Export filter listeners
+        document.getElementById('export-filter-tipo').addEventListener('change', () => {
+            this.loadExportPreview();
+        });
+
+        document.getElementById('export-filter-radar').addEventListener('change', () => {
+            this.loadExportPreview();
+        });
+
         // Distance validation on checklist
         document.getElementById('distancia-placa').addEventListener('input', () => {
             this.validateDistance();
@@ -1045,15 +1054,49 @@ const app = {
     },
 
     /**
-     * Load export preview
+     * Load export preview with filters
      */
     async loadExportPreview() {
         try {
-            const radares = await db.getRadares();
+            const allRadares = await db.getRadares();
             const container = document.getElementById('export-table-container');
+            const countSpan = document.getElementById('export-count');
+            const radarSelect = document.getElementById('export-filter-radar');
+            const tipoFilter = document.getElementById('export-filter-tipo').value;
+            const radarFilter = document.getElementById('export-filter-radar').value;
 
-            if (radares.length === 0) {
-                container.innerHTML = '<p class="empty-message">Nenhum dado para exportar.</p>';
+            // Populate radar dropdown (only on first load or when empty)
+            if (radarSelect.options.length <= 1) {
+                const sortedRadares = [...allRadares].sort((a, b) => parseFloat(a.km) - parseFloat(b.km));
+                sortedRadares.forEach(radar => {
+                    const option = document.createElement('option');
+                    option.value = radar.id;
+                    option.textContent = `Km ${radar.km} - ${radar.sentido || 'N/A'}${radar.tipo ? ` (${radar.tipo.toUpperCase()})` : ''}`;
+                    radarSelect.appendChild(option);
+                });
+            }
+
+            // Apply filters
+            let filteredRadares = allRadares;
+
+            // Filter by tipo
+            if (tipoFilter !== 'all') {
+                filteredRadares = filteredRadares.filter(r => r.tipo === tipoFilter);
+            }
+
+            // Filter by specific radar
+            if (radarFilter !== 'all') {
+                filteredRadares = filteredRadares.filter(r => r.id === radarFilter);
+            }
+
+            // Sort by km
+            filteredRadares.sort((a, b) => parseFloat(a.km) - parseFloat(b.km));
+
+            // Update count
+            countSpan.textContent = `(${filteredRadares.length} radares)`;
+
+            if (filteredRadares.length === 0) {
+                container.innerHTML = '<p class="empty-message">Nenhum dado para exportar com os filtros selecionados.</p>';
                 return;
             }
 
@@ -1062,18 +1105,18 @@ const app = {
                     <thead>
                         <tr>
                             <th>Km</th>
+                            <th>Tipo</th>
                             <th>Velocidade</th>
-                            <th>Tipo Via</th>
                             <th>Município</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${radares.map(radar => `
+                        ${filteredRadares.map(radar => `
                             <tr>
                                 <td>${radar.km}</td>
+                                <td><span class="radar-type-badge ${radar.tipo || ''}">${radar.tipo === 'per' ? '🚨 PER' : radar.tipo === 'educativo' ? '📚 EDU' : '-'}</span></td>
                                 <td>${radar.velocidade} km/h</td>
-                                <td>${this.getTipoViaLabel(radar.tipoVia)}</td>
                                 <td>${radar.municipio || '-'}</td>
                                 <td><span class="radar-status-badge ${radar.status}">${this.getStatusLabel(radar.status)}</span></td>
                             </tr>
@@ -1084,6 +1127,27 @@ const app = {
         } catch (error) {
             console.error('Error loading export preview:', error);
         }
+    },
+
+    /**
+     * Get filtered radares based on export filters
+     */
+    async getFilteredRadaresForExport() {
+        const allRadares = await db.getRadares();
+        const tipoFilter = document.getElementById('export-filter-tipo').value;
+        const radarFilter = document.getElementById('export-filter-radar').value;
+
+        let filteredRadares = allRadares;
+
+        if (tipoFilter !== 'all') {
+            filteredRadares = filteredRadares.filter(r => r.tipo === tipoFilter);
+        }
+
+        if (radarFilter !== 'all') {
+            filteredRadares = filteredRadares.filter(r => r.id === radarFilter);
+        }
+
+        return filteredRadares.sort((a, b) => parseFloat(a.km) - parseFloat(b.km));
     },
 
     /**
@@ -1195,11 +1259,11 @@ const app = {
         try {
             this.showToast('Gerando PDF com fotos...', 'info');
 
-            const radares = await db.getRadares();
+            const radares = await this.getFilteredRadaresForExport();
             const checklists = await db.getChecklists();
 
             if (radares.length === 0) {
-                this.showToast('Nenhum dado para exportar', 'warning');
+                this.showToast('Nenhum dado para exportar com os filtros selecionados', 'warning');
                 return;
             }
 
@@ -1392,11 +1456,11 @@ const app = {
         try {
             this.showToast('Gerando Excel e relatório de fotos...', 'info');
 
-            const radares = await db.getRadares();
+            const radares = await this.getFilteredRadaresForExport();
             const checklists = await db.getChecklists();
 
             if (radares.length === 0) {
-                this.showToast('Nenhum dado para exportar', 'warning');
+                this.showToast('Nenhum dado para exportar com os filtros selecionados', 'warning');
                 return;
             }
 
