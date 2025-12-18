@@ -132,6 +132,20 @@
                             <span class="stat-label">Pendentes</span>
                         </div>
                     </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">🚨</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-per">0</span>
+                            <span class="stat-label">PER</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon purple">📚</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="stat-educativo">0</span>
+                            <span class="stat-label">Educativos</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="quick-actions">
@@ -288,6 +302,14 @@
                     <div class="form-group">
                         <label for="radar-velocidade">Velocidade (km/h)</label>
                         <input type="number" id="radar-velocidade" placeholder="Ex: 80" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="radar-tipo">Tipo do Radar</label>
+                        <select id="radar-tipo" required>
+                            <option value="">Selecione...</option>
+                            <option value="per">PER (Punitivo)</option>
+                            <option value="educativo">Educativo</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="radar-tipo-via">Tipo de Via</label>
