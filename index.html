@@ -208,6 +208,21 @@
                     <h2>Checklists</h2>
                 </div>
 
+                <!-- Search and Filters -->
+                <div class="checklist-filters">
+                    <div class="search-bar">
+                        <input type="text" id="search-checklist" placeholder="Buscar por Km, data ou status...">
+                        <button class="search-btn">🔍</button>
+                    </div>
+
+                    <div class="filter-chips">
+                        <button class="chip active" data-filter="all">Todos</button>
+                        <button class="chip" data-filter="conforme">Conformes</button>
+                        <button class="chip" data-filter="nao-conforme">Não Conformes</button>
+                        <button class="chip" data-filter="pendente">Pendentes</button>
+                    </div>
+                </div>
+
                 <div id="checklist-list" class="checklist-list">
                     <!-- Checklist items will be rendered here -->
                 </div>
@@ -477,6 +492,64 @@
                     </div>
                 </form>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal: Checklist Details/Edit -->
+    <div id="modal-checklist-details" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="checklist-details-title">Checklist - Km XX</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="checklist-details-body">
+                <!-- Informações do radar -->
+                <div class="checklist-radar-info-section">
+                    <h3>Informações do Radar</h3>
+                    <div id="checklist-details-radar-info"></div>
+                </div>
+
+                <!-- Dados do checklist -->
+                <div class="checklist-data-section">
+                    <h3>Dados do Checklist</h3>
+                    <div id="checklist-details-data"></div>
+                </div>
+
+                <!-- Fotos do checklist (editáveis) -->
+                <div class="checklist-photos-section">
+                    <h3>Fotos do Checklist</h3>
+                    <div id="checklist-details-photos-preview" class="photos-preview"></div>
+                    <div class="photo-buttons">
+                        <button type="button" id="btn-edit-checklist-camera" class="btn btn-secondary">
+                            📷 Adicionar Foto
+                        </button>
+                        <input type="file" id="checklist-edit-photo-input" accept="image/*" multiple
+                            style="display: none;">
+                    </div>
+                </div>
+
+                <!-- Fotos originais do radar (somente visualização) -->
+                <div class="radar-photos-section">
+                    <h3>Fotos do Radar (referência)</h3>
+                    <div id="checklist-radar-photos-readonly" class="photos-preview readonly"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-save-checklist-edit" class="btn btn-primary">💾 Salvar Alterações</button>
+                <button id="btn-delete-checklist" class="btn btn-danger">🗑️ Excluir Checklist</button>
+                <button class="btn btn-secondary modal-close">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox Modal -->
+    <div id="lightbox-modal" class="lightbox-modal">
+        <div class="lightbox-content">
+            <button class="lightbox-close">&times;</button>
+            <button class="lightbox-prev">&#10094;</button>
+            <img id="lightbox-image" src="" alt="Preview">
+            <button class="lightbox-next">&#10095;</button>
+            <div class="lightbox-caption"></div>
         </div>
     </div>
 
