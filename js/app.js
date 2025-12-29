@@ -72,6 +72,9 @@ const app = {
             // Setup event listeners
             this.setupEventListeners();
 
+            // Setup lightbox for image preview
+            this.setupLightbox();
+
             // Load initial data (with timeout to prevent blocking)
             try {
                 await Promise.race([
@@ -219,6 +222,40 @@ const app = {
         // Distance validation on checklist
         document.getElementById('distancia-placa').addEventListener('input', () => {
             this.validateDistance();
+        });
+
+        // Checklist details modal buttons
+        const btnSaveChecklistEdit = document.getElementById('btn-save-checklist-edit');
+        if (btnSaveChecklistEdit) {
+            btnSaveChecklistEdit.addEventListener('click', () => {
+                this.saveChecklistEdit();
+            });
+        }
+
+        const btnDeleteChecklist = document.getElementById('btn-delete-checklist');
+        if (btnDeleteChecklist) {
+            btnDeleteChecklist.addEventListener('click', () => {
+                if (this.currentEditingChecklistId) {
+                    this.deleteChecklist(this.currentEditingChecklistId);
+                }
+            });
+        }
+
+        // Checklist search and filters
+        const searchChecklistInput = document.getElementById('search-checklist');
+        if (searchChecklistInput) {
+            searchChecklistInput.addEventListener('input', (e) => {
+                this.filterChecklists(e.target.value);
+            });
+        }
+
+        document.querySelectorAll('#view-checklist .filter-chips .chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('#view-checklist .filter-chips .chip')
+                    .forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                this.filterChecklistsByStatus(chip.dataset.filter);
+            });
         });
     },
 
@@ -846,8 +883,17 @@ const app = {
 
             container.innerHTML = checklists.map(checklist => {
                 const radar = radares.find(r => r.id === checklist.radarId);
+                const photoCount = (checklist.photos || []).length;
+
                 return `
                     <div class="checklist-card" data-id="${checklist.id}">
+                        ${photoCount > 0 ? `
+                            <div class="photo-count">
+                                <span class="photo-count-icon">📸</span>
+                                <span>${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}</span>
+                            </div>
+                        ` : ''}
+                        
                         <div class="radar-card-header">
                             <span class="radar-km">Km ${radar?.km || 'N/A'}${radar?.sentido ? ' - ' + radar.sentido : ''}</span>
                             <span class="radar-status-badge ${checklist.status}">${this.getStatusLabel(checklist.status)}</span>
@@ -879,7 +925,98 @@ const app = {
     },
 
     /**
-     * Open checklist details modal
+     * Filter checklists by search term
+     */
+    async filterChecklists(searchTerm) {
+        const checklists = await db.getChecklists();
+        const radares = await db.getRadares();
+        const term = searchTerm.toLowerCase();
+
+        const filtered = checklists.filter(checklist => {
+            const radar = radares.find(r => r.id === checklist.radarId);
+            const km = radar?.km || '';
+            const date = this.formatDate(checklist.date);
+            const status = this.getStatusLabel(checklist.status);
+
+            return km.toString().toLowerCase().includes(term) ||
+                date.toLowerCase().includes(term) ||
+                status.toLowerCase().includes(term);
+        });
+
+        this.renderFilteredChecklists(filtered, radares);
+    },
+
+    /**
+     * Filter checklists by status
+     */
+    async filterChecklistsByStatus(status) {
+        const checklists = await db.getChecklists();
+        const radares = await db.getRadares();
+
+        if (status === 'all') {
+            this.renderFilteredChecklists(checklists, radares);
+        } else {
+            const filtered = checklists.filter(c => c.status === status);
+            this.renderFilteredChecklists(filtered, radares);
+        }
+    },
+
+    /**
+     * Render filtered checklists
+     */
+    renderFilteredChecklists(checklists, radares) {
+        const container = document.getElementById('checklist-list');
+
+        if (checklists.length === 0) {
+            container.innerHTML = '<p class="empty-message">Nenhum checklist encontrado.</p>';
+            return;
+        }
+
+        // Sort by date (newest first)
+        checklists.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        container.innerHTML = checklists.map(checklist => {
+            const radar = radares.find(r => r.id === checklist.radarId);
+            const photoCount = (checklist.photos || []).length;
+
+            return `
+                <div class="checklist-card" data-id="${checklist.id}">
+                    ${photoCount > 0 ? `
+                        <div class="photo-count">
+                            <span class="photo-count-icon">📸</span>
+                            <span>${photoCount} ${photoCount === 1 ? 'foto' : 'fotos'}</span>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="radar-card-header">
+                        <span class="radar-km">Km ${radar?.km || 'N/A'}${radar?.sentido ? ' - ' + radar.sentido : ''}</span>
+                        <span class="radar-status-badge ${checklist.status}">${this.getStatusLabel(checklist.status)}</span>
+                    </div>
+                    <div class="radar-info" style="margin-top: var(--space-sm);">
+                        <div class="radar-detail">
+                            <span>📅</span>
+                            <span>${this.formatDate(checklist.date)}</span>
+                        </div>
+                        <div class="radar-detail">
+                            <span>📏</span>
+                            <span>Distância: ${checklist.distanciaPlaca || 'N/A'} m</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add click handlers
+        container.querySelectorAll('.checklist-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const id = card.dataset.id;
+                this.openChecklistDetails(id);
+            });
+        });
+    },
+
+    /**
+     * Open checklist details modal for viewing/editing
      */
     async openChecklistDetails(checklistId) {
         try {
@@ -891,82 +1028,103 @@ const app = {
 
             const radar = await db.getRadar(checklist.radarId);
 
-            const modal = document.getElementById('modal-radar');
-            const body = document.getElementById('modal-radar-body');
-            document.getElementById('modal-radar-title').textContent = `Checklist - Km ${radar?.km || 'N/A'}`;
+            this.currentEditingChecklistId = checklistId;
 
-            body.innerHTML = `
-                <div class="checklist-details">
-                    <div class="detail-status" style="margin-bottom: var(--space-lg);">
-                        <label>Status</label>
-                        <span class="radar-status-badge ${checklist.status}">${this.getStatusLabel(checklist.status)}</span>
-                        <small>Realizado em: ${this.formatDate(checklist.date)}</small>
+            // Set title
+            document.getElementById('checklist-details-title').textContent =
+                `Checklist - Km ${radar?.km || 'N/A'} - BR-040`;
+
+            // Render radar info (readonly)
+            document.getElementById('checklist-details-radar-info').innerHTML = `
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>Velocidade:</label>
+                        <span>${radar.velocidade} km/h</span>
                     </div>
-
-                    ${checklist.photos && checklist.photos.length > 0 ? `
-                        <div class="radar-photos-carousel" style="margin-bottom: var(--space-lg);">
-                            ${checklist.photos.map((photo, i) => `
-                                <img src="${photo.data}" alt="Foto ${i + 1}" class="radar-detail-photo">
-                            `).join('')}
-                        </div>
-                    ` : ''}
-
-                    <div class="checklist-section">
-                        <h3>Verificações Realizadas</h3>
-                        <div class="check-list" style="display: flex; flex-direction: column; gap: var(--space-sm);">
-                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
-                                <span>${checklist.placaPresente ? '✅' : '❌'}</span>
-                                <span>Placa R-19 presente e visível</span>
-                            </div>
-                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
-                                <span>${checklist.placaLegivel ? '✅' : '❌'}</span>
-                                <span>Placa legível e em bom estado</span>
-                            </div>
-                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
-                                <span>${checklist.pinturaSolo ? '✅' : '❌'}</span>
-                                <span>Pintura de solo adequada</span>
-                            </div>
-                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
-                                <span>${checklist.semObstrucao ? '✅' : '❌'}</span>
-                                <span>Sem obstruções visuais</span>
-                            </div>
-                            <div class="check-item" style="display: flex; align-items: center; gap: var(--space-sm);">
-                                <span>${checklist.placaVelocidade ? '✅' : '❌'}</span>
-                                <span>Placa de velocidade visível</span>
-                            </div>
-                        </div>
+                    <div class="info-item">
+                        <label>Tipo Via:</label>
+                        <span>${this.getTipoViaLabel(radar.tipoVia)}</span>
                     </div>
-
-                    <div class="detail-grid" style="margin-top: var(--space-lg);">
-                        <div class="detail-item">
-                            <label>Distância da Placa</label>
-                            <span>${checklist.distanciaPlaca || 'N/A'} m</span>
-                        </div>
-                    </div>
-
-                    ${checklist.observacoes ? `
-                        <div class="detail-description" style="margin-top: var(--space-lg);">
-                            <label>Observações</label>
-                            <p style="white-space: pre-wrap;">${checklist.observacoes}</p>
-                        </div>
-                    ` : ''}
-
-                    <div class="detail-actions" style="margin-top: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-sm);">
-                        <button class="btn btn-primary" onclick="app.editChecklist('${checklist.id}')">
-                            ✏️ Editar Checklist
-                        </button>
-                        <button class="btn btn-danger" onclick="app.deleteChecklist('${checklist.id}')">
-                            🗑️ Excluir Checklist
-                        </button>
+                    <div class="info-item">
+                        <label>Município:</label>
+                        <span>${radar.municipio || 'N/A'}</span>
                     </div>
                 </div>
             `;
 
-            modal.classList.add('open');
+            // Render checklist data
+            document.getElementById('checklist-details-data').innerHTML = `
+                <div class="checklist-info-grid">
+                    <div class="info-row">
+                        <label>📅 Data:</label>
+                        <span>${this.formatDate(checklist.date)}</span>
+                    </div>
+                    <div class="info-row">
+                        <label>📏 Distância da Placa:</label>
+                        <span>${checklist.distanciaPlaca || 'N/A'} metros</span>
+                    </div>
+                    <div class="info-row">
+                        <label>✅ Status:</label>
+                        <span class="status-badge ${checklist.status}">${this.getStatusLabel(checklist.status)}</span>
+                    </div>
+                    <div class="info-row">
+                        <label>📋 Placa Presente:</label>
+                        <span>${checklist.placaPresente ? '✅ Sim' : '❌ Não'}</span>
+                    </div>
+                    <div class="info-row">
+                        <label>👁️ Placa Legível:</label>
+                        <span>${checklist.placaLegivel ? '✅ Sim' : '❌ Não'}</span>
+                    </div>
+                    <div class="info-row">
+                        <label>🎨 Pintura Solo:</label>
+                        <span>${checklist.pinturaSolo ? '✅ Sim' : '❌ Não'}</span>
+                    </div>
+                    <div class="info-row">
+                        <label>🚧 Sem Obstrução:</label>
+                        <span>${checklist.semObstrucao ? '✅ Sim' : '❌ Não'}</span>
+                    </div>
+                    ${checklist.observacoes ? `
+                    <div class="info-row full-width">
+                        <label>📝 Observações:</label>
+                        <p>${checklist.observacoes}</p>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+            // Render checklist photos (EDITABLE with × button)
+            camera.setPhotos(checklist.photos || [], 'checklist-edit');
+
+            // Render radar photos (READONLY - no × button)
+            this.renderRadarPhotosReadonly(radar.photos || []);
+
+            // Open modal
+            document.getElementById('modal-checklist-details').classList.add('open');
+
         } catch (error) {
             console.error('Error opening checklist details:', error);
             this.showToast('Erro ao abrir detalhes do checklist', 'error');
         }
+    },
+
+    /**
+     * Render radar photos in readonly mode (no remove button)
+     */
+    renderRadarPhotosReadonly(photos) {
+        const container = document.getElementById('checklist-radar-photos-readonly');
+        if (!container) return;
+
+        if (!photos || photos.length === 0) {
+            container.innerHTML = '<p class="empty-message">Nenhuma foto cadastrada no radar</p>';
+            return;
+        }
+
+        container.innerHTML = photos.map((photo, index) => `
+            <div class="photo-preview-item readonly">
+                <img src="${photo.data}" alt="Foto radar ${index + 1}">
+                <div class="photo-label">Foto ${index + 1}</div>
+            </div>
+        `).join('');
     },
 
     /**
@@ -1030,6 +1188,44 @@ const app = {
         } catch (error) {
             console.error('Error editing checklist:', error);
             this.showToast('Erro ao editar checklist', 'error');
+        }
+    },
+
+    /**
+     * Save checklist edits (photos only)
+     */
+    async saveChecklistEdit() {
+        try {
+            if (!this.currentEditingChecklistId) {
+                this.showToast('Nenhum checklist em edição', 'error');
+                return;
+            }
+
+            const currentChecklist = await db.getChecklist(this.currentEditingChecklistId);
+
+            // Update only photos, keep other data
+            const updatedChecklist = {
+                ...currentChecklist,
+                id: this.currentEditingChecklistId,
+                photos: camera.getPhotos('checklist-edit'),
+                updatedAt: new Date().toISOString()
+            };
+
+            await db.saveChecklist(updatedChecklist);
+
+            this.closeAllModals();
+            camera.clearPhotos('checklist-edit');
+            this.showToast('Fotos do checklist atualizadas!', 'success');
+            this.loadChecklists();
+            if (this.currentView === 'dashboard') {
+                this.loadDashboard();
+            }
+
+            this.currentEditingChecklistId = null;
+
+        } catch (error) {
+            console.error('Error saving checklist edit:', error);
+            this.showToast('Erro ao salvar alterações', 'error');
         }
     },
 
@@ -1253,11 +1449,11 @@ const app = {
     },
 
     /**
-     * Export to PDF with photos
+     * Export to PDF with enhancements - Professional Report
      */
     async exportToPDF() {
         try {
-            this.showToast('Gerando PDF com fotos...', 'info');
+            this.showToast('Gerando relatório profissional...', 'info');
 
             const radares = await this.getFilteredRadaresForExport();
             const checklists = await db.getChecklists();
@@ -1269,25 +1465,135 @@ const app = {
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('landscape');
+            const stats = await db.getStats();
 
-            // Title page
-            doc.setFontSize(24);
+            // ========================================
+            // CAPA PROFISSIONAL
+            // ========================================
+            doc.setFontSize(28);
             doc.setTextColor(99, 102, 241);
-            doc.text('Relatório de Fiscalização de Radares', 148, 60, { align: 'center' });
+            doc.text('Relatório de Fiscalização', 148, 50, { align: 'center' });
+            doc.text('de Radares Eletrônicos', 148, 62, { align: 'center' });
 
-            doc.setFontSize(18);
+            doc.setFontSize(20);
             doc.setTextColor(100);
-            doc.text('BR-040', 148, 75, { align: 'center' });
+            doc.text('BR-040', 148, 80, { align: 'center' });
 
             doc.setFontSize(12);
-            doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 148, 90, { align: 'center' });
-            doc.text('Responsável: Luis Pigrucci', 148, 100, { align: 'center' });
+            doc.setTextColor(60);
+            doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}`, 148, 95, { align: 'center' });
+            doc.text(`Período Analisado: ${new Date().getFullYear()}`, 148, 103, { align: 'center' });
+            doc.text('Responsável Técnico: Luis Pigrucci', 148, 118, { align: 'center' });
 
-            // Summary
-            const stats = await db.getStats();
+            // ========================================
+            // RESUMO EXECUTIVO COM GRÁFICOS
+            // ========================================
+            doc.addPage();
+            this.addPageFooter(doc, 2); // Page 2
+
+            doc.setFontSize(18);
+            doc.setTextColor(99, 102, 241);
+            doc.text('Resumo Executivo', 14, 15);
+
+            // Statistics boxes
+            doc.setFontSize(11);
+            doc.setTextColor(60);
+
+            const boxWidth = 65;
+            const boxHeight = 22;
+            const startY = 25;
+
+            // Total box
+            doc.setFillColor(99, 102, 241);
+            doc.roundedRect(14, startY, boxWidth, boxHeight, 3, 3, 'F');
+            doc.setTextColor(255);
+            doc.setFontSize(24);
+            doc.text(stats.total.toString(), 14 + boxWidth / 2, startY + 12, { align: 'center' });
+            doc.setFontSize(10);
+            doc.text('Total de Radares', 14 + boxWidth / 2, startY + 18, { align: 'center' });
+
+            // Conformes box
+            doc.setFillColor(16, 185, 129);
+            doc.roundedRect(84, startY, boxWidth, boxHeight, 3, 3, 'F');
+            doc.setFontSize(24);
+            doc.text(stats.conformes.toString(), 84 + boxWidth / 2, startY + 12, { align: 'center' });
+            doc.setFontSize(10);
+            doc.text('Conformes', 84 + boxWidth / 2, startY + 18, { align: 'center' });
+
+            // Não Conformes box
+            doc.setFillColor(239, 68, 68);
+            doc.roundedRect(154, startY, boxWidth, boxHeight, 3, 3, 'F');
+            doc.setFontSize(24);
+            doc.text(stats.naoConformes.toString(), 154 + boxWidth / 2, startY + 12, { align: 'center' });
+            doc.setFontSize(10);
+            doc.text('Não Conformes', 154 + boxWidth / 2, startY + 18, { align: 'center' });
+
+            // Pendentes box
+            doc.setFillColor(245, 158, 11);
+            doc.roundedRect(224, startY, boxWidth, boxHeight, 3, 3, 'F');
+            doc.setFontSize(24);
+            doc.text(stats.pendentes.toString(), 224 + boxWidth / 2, startY + 12, { align: 'center' });
+            doc.setFontSize(10);
+            doc.text('Pendentes', 224 + boxWidth / 2, startY + 18, { align: 'center' });
+
+            // Visual graph - % distribution
+            const graphY = 55;
+            const totalChecked = stats.conformes + stats.naoConformes;
+            if (totalChecked > 0) {
+                const conformePercent = (stats.conformes / totalChecked) * 100;
+                const naoConformePercent = (stats.naoConformes / totalChecked) * 100;
+
+                doc.setFontSize(14);
+                doc.setTextColor(60);
+                doc.text('Distribuição de Conformidade', 14, graphY);
+
+                // Bar graph
+                const barWidth = 275;
+                const barHeight = 25;
+                const barY = graphY + 5;
+
+                // Conforme bar
+                const conformeWidth = (conformePercent / 100) * barWidth;
+                doc.setFillColor(16, 185, 129);
+                doc.rect(14, barY, conformeWidth, barHeight, 'F');
+
+                // Não Conforme bar
+                doc.setFillColor(239, 68, 68);
+                doc.rect(14 + conformeWidth, barY, barWidth - conformeWidth, barHeight, 'F');
+
+                // Labels
+                doc.setTextColor(255);
+                doc.setFontSize(12);
+                if (conformePercent > 15) {
+                    doc.text(`${conformePercent.toFixed(1)}%`, 14 + conformeWidth / 2, barY + 16, { align: 'center' });
+                }
+                if (naoConformePercent > 15) {
+                    doc.text(`${naoConformePercent.toFixed(1)}%`, 14 + conformeWidth + (barWidth - conformeWidth) / 2, barY + 16, { align: 'center' });
+                }
+            }
+
+            // Key findings
             doc.setFontSize(14);
             doc.setTextColor(60);
-            doc.text(`Total: ${stats.total} | Conformes: ${stats.conformes} | Não Conformes: ${stats.naoConformes} | Pendentes: ${stats.pendentes}`, 148, 120, { align: 'center' });
+            doc.text('Principais Achados', 14, 95);
+
+            doc.setFontSize(10);
+            doc.text(`• Total de ${checklists.length} verificações realizadas`, 14, 105);
+            doc.text(`• Taxa de conformidade: ${totalChecked > 0 ? ((stats.conformes / totalChecked) * 100).toFixed(1) : 0}%`, 14, 112);
+            doc.text(`• ${stats.pendentes} radares aguardando verificação`, 14, 119);
+
+            const radaresComFotos = radares.filter(r => r.photos && r.photos.length > 0).length;
+            doc.text(`• ${radaresComFotos} radares com registro fotográfico`, 14, 126);
+
+            // ========================================
+            // TABELA MELHORADA COM MAIS COLUNAS
+            // ========================================
+            doc.addPage();
+            this.addPageFooter(doc, 3);
+
+            doc.setFontSize(16);
+            doc.setTextColor(99, 102, 241);
+            doc.text('Inventário Completo de Radares', 14, 15);
 
             // Sort radares by km
             const sortedRadares = [...radares].sort((a, b) => {
@@ -1296,65 +1602,72 @@ const app = {
                 return kmA - kmB;
             });
 
-            // New page for table
-            doc.addPage();
-
-            // Table header
-            doc.setFontSize(16);
-            doc.setTextColor(99, 102, 241);
-            doc.text('Resumo dos Radares', 14, 15);
-
-            // Table data
+            // Enhanced table data with more columns
             const tableData = sortedRadares.map(radar => {
-                const lastChecklist = checklists
-                    .filter(c => c.radarId === radar.id)
-                    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                const radarChecklists = checklists.filter(c => c.radarId === radar.id);
+                const lastChecklist = radarChecklists.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
                 let classificacao = 'RURAL';
                 if (radar.tipoVia === 'rural-urbana') classificacao = 'RCU';
                 else if (radar.tipoVia === 'urbana') classificacao = 'URBANA';
 
-                const hasPhotos = (radar.photos && radar.photos.length > 0) ||
-                    (lastChecklist?.photos && lastChecklist.photos.length > 0);
+                const photoCount = (radar.photos?.length || 0) + (lastChecklist?.photos?.length || 0);
 
                 return [
                     `Km ${radar.km}`,
+                    radar.municipio || 'N/A',
                     radar.tipoRadar || 'PER',
                     `${radar.velocidade || 60}`,
                     classificacao,
                     radar.sentido || '-',
                     lastChecklist?.distanciaPlaca ? `${lastChecklist.distanciaPlaca}m` : '-',
+                    lastChecklist ? this.formatDate(lastChecklist.date) : '-',
+                    radarChecklists.length.toString(),
                     this.getStatusLabel(radar.status),
-                    hasPhotos ? 'SIM' : '-'
+                    photoCount > 0 ? photoCount.toString() : '-'
                 ];
             });
 
             doc.autoTable({
                 startY: 22,
-                head: [['Local', 'Tipo', 'Vel.', 'Classif.', 'Sentido', 'Dist.', 'Status', 'Fotos']],
+                head: [['Local', 'Município', 'Tipo', 'Vel.', 'Class.', 'Sent.', 'Dist.', 'Últ. Verif.', 'Checks', 'Status', 'Fotos']],
                 body: tableData,
                 theme: 'grid',
                 headStyles: {
                     fillColor: [99, 102, 241],
                     textColor: 255,
-                    fontSize: 9,
-                    fontStyle: 'bold'
+                    fontSize: 8,
+                    fontStyle: 'bold',
+                    halign: 'center'
                 },
-                bodyStyles: { fontSize: 8 },
+                bodyStyles: {
+                    fontSize: 7,
+                    cellPadding: 2
+                },
                 alternateRowStyles: { fillColor: [245, 245, 250] },
                 columnStyles: {
-                    0: { cellWidth: 28 },
-                    1: { cellWidth: 22 },
-                    2: { cellWidth: 15 },
-                    3: { cellWidth: 20 },
-                    4: { cellWidth: 18 },
-                    5: { cellWidth: 18 },
-                    6: { cellWidth: 25 },
-                    7: { cellWidth: 18 }
+                    0: { cellWidth: 22 },  // Local
+                    1: { cellWidth: 24 },  // Município (reduzido 28->24)
+                    2: { cellWidth: 16 },  // Tipo
+                    3: { cellWidth: 12 },  // Vel
+                    4: { cellWidth: 16 },  // Class
+                    5: { cellWidth: 14 },  // Sent
+                    6: { cellWidth: 14 },  // Dist
+                    7: { cellWidth: 27 },  // Últ. Verif (aumentado 22->27)
+                    8: { cellWidth: 16 },  // Checks
+                    9: { cellWidth: 22 },  // Status (reduzido 24->22)
+                    10: { cellWidth: 14 }, // Fotos
+                },
+                didDrawPage: (data) => {
+                    // Adicionar rodapé em cada página da tabela
+                    const pageCount = doc.internal.getNumberOfPages();
+                    this.addPageFooter(doc, doc.internal.getCurrentPageInfo().pageNumber);
                 }
             });
 
-            // Add detailed pages with photos for each radar that has photos
+            // ========================================
+            // PÁGINAS DETALHADAS COM FOTOS EM GRID 2x2
+            // ========================================
             for (const radar of sortedRadares) {
                 const lastChecklist = checklists
                     .filter(c => c.radarId === radar.id)
@@ -1368,13 +1681,15 @@ const app = {
 
                 // New page for this radar
                 doc.addPage();
+                const currentPage = doc.internal.getCurrentPageInfo().pageNumber;
+                this.addPageFooter(doc, currentPage);
 
                 // Radar header
                 doc.setFontSize(16);
                 doc.setTextColor(99, 102, 241);
                 doc.text(`Km ${radar.km} - BR-040`, 14, 15);
 
-                doc.setFontSize(10);
+                doc.setFontSize(9);
                 doc.setTextColor(60);
 
                 let classificacao = 'RURAL';
@@ -1382,72 +1697,220 @@ const app = {
                 else if (radar.tipoVia === 'urbana') classificacao = 'URBANA';
 
                 doc.text(`Tipo: ${radar.tipoRadar || 'PER'} | Velocidade: ${radar.velocidade || 60} km/h | Classificação: ${classificacao}`, 14, 22);
-                doc.text(`Sentido: ${radar.sentido || '-'} | Status: ${this.getStatusLabel(radar.status)}`, 14, 28);
+                doc.text(`Sentido: ${radar.sentido || 'N/A'} | Município: ${radar.municipio || 'N/A'}`, 14, 27);
 
                 if (lastChecklist) {
-                    doc.text(`Distância Placa: ${lastChecklist.distanciaPlaca || '-'}m | Verificado: ${this.formatDate(lastChecklist.date)}`, 14, 34);
+                    doc.text(`Última Verificação: ${this.formatDate(lastChecklist.date)} | Status: ${this.getStatusLabel(lastChecklist.status)}`, 14, 32);
                 }
 
-                // Add photos
-                let xPos = 14;
-                let yPos = 45;
-                const photoWidth = 85;
-                const photoHeight = 65;
-                const spacing = 5;
-
-                for (let i = 0; i < allPhotos.length; i++) {
-                    const photo = allPhotos[i];
-
-                    try {
-                        // Add image
-                        doc.addImage(photo.data, 'JPEG', xPos, yPos, photoWidth, photoHeight);
-
-                        // Add caption
-                        doc.setFontSize(8);
-                        doc.setTextColor(100);
-                        const caption = i < radarPhotos.length ? `Foto Radar ${i + 1}` : `Foto Checklist ${i - radarPhotos.length + 1}`;
-                        doc.text(caption, xPos + photoWidth / 2, yPos + photoHeight + 4, { align: 'center' });
-
-                        // Move position
-                        xPos += photoWidth + spacing;
-
-                        // New row after 3 photos
-                        if ((i + 1) % 3 === 0) {
-                            xPos = 14;
-                            yPos += photoHeight + 15;
-                        }
-
-                        // New page if needed
-                        if (yPos > 150 && i < allPhotos.length - 1) {
-                            doc.addPage();
-                            xPos = 14;
-                            yPos = 20;
-                        }
-                    } catch (photoError) {
-                        console.warn('Error adding photo to PDF:', photoError);
-                    }
-                }
-
-                // Add observations if any
+                // Observações (última linha das informações do radar)
+                let nextY = lastChecklist ? 37 : 32;
                 if (radar.descricao || lastChecklist?.observacoes) {
-                    const obsY = Math.max(yPos + photoHeight + 20, 180);
-                    doc.setFontSize(10);
-                    doc.setTextColor(60);
-                    doc.text('Observações:', 14, obsY);
-                    doc.setFontSize(9);
-                    doc.text(radar.descricao || lastChecklist?.observacoes || '', 14, obsY + 6);
+                    doc.setFontSize(8);
+                    doc.setTextColor(80);
+                    const obs = radar.descricao || lastChecklist?.observacoes || '';
+                    const splitObs = doc.splitTextToSize(obs, 275);
+                    // Limitar a 2 linhas para não ocupar muito espaço
+                    const limitedObs = splitObs.slice(0, 2);
+                    doc.text(`Observações: ${limitedObs.join(' ')}`, 14, nextY);
+                    nextY += 5;
+                }
+
+                // GRID 2x2 DE FOTOS (economiza páginas!)
+                const gridCols = 2;
+                const gridRows = 2;
+                const photosPerPage = gridCols * gridRows; // 4 fotos por página
+
+                const imgWidth = 125;  // Reduzido para caber na página
+                const imgHeight = 70;  // Reduzido de 80 para 70 para não sobrepor rodapé
+                const marginX = 14;
+                const marginY = 38;
+                const gapX = 8;
+                const gapY = 6;
+
+                for (let i = 0; i < allPhotos.length; i += photosPerPage) {
+                    if (i > 0) {
+                        doc.addPage();
+                        const newPage = doc.internal.getCurrentPageInfo().pageNumber;
+                        this.addPageFooter(doc, newPage);
+
+                        // Repeat header on continuation page
+                        doc.setFontSize(14);
+                        doc.setTextColor(99, 102, 241);
+                        doc.text(`Km ${radar.km} (continuação)`, 14, 15);
+                    }
+
+                    // Draw grid of photos
+                    const pagePhotos = allPhotos.slice(i, i + photosPerPage);
+
+                    pagePhotos.forEach((photo, index) => {
+                        const row = Math.floor(index / gridCols);
+                        const col = index % gridCols;
+
+                        const x = marginX + col * (imgWidth + gapX);
+                        const y = (i > 0 ? 22 : marginY) + row * (imgHeight + gapY);
+
+                        try {
+                            doc.addImage(photo.data, 'JPEG', x, y, imgWidth, imgHeight);
+
+                            // Photo label
+                            doc.setFontSize(8);
+                            doc.setTextColor(255);
+                            doc.setFillColor(0, 0, 0, 0.7);
+                            doc.rect(x, y + imgHeight - 8, imgWidth, 8, 'F');
+                            doc.text(`Foto ${i + index + 1}`, x + imgWidth / 2, y + imgHeight - 3, { align: 'center' });
+                        } catch (err) {
+                            console.error('Error adding photo:', err);
+                        }
+                    });
+                }
+
+                // Observations (se houver espaço na página)
+                if (radar.descricao || lastChecklist?.observacoes) {
+                    const obsY = marginY + 2 * (imgHeight + gapY) + 5;
+
+                    // Se não houver espaço suficiente (menos de 15px até rodapé), adicionar nova página
+                    if (false) { // DESABILITADO: Observações nunca vão para nova página
+                        doc.addPage();
+                        this.addPageFooter(doc, doc.internal.getCurrentPageInfo().pageNumber);
+                        doc.setFontSize(14);
+                        doc.setTextColor(99, 102, 241);
+                        doc.text(`Km ${radar.km} - Observações`, 14, 15);
+
+                        doc.setFontSize(10);
+                        doc.setTextColor(60);
+                        doc.text('Observações:', 14, 25);
+                        doc.setFontSize(9);
+                        const obs = radar.descricao || lastChecklist?.observacoes || '';
+                        const splitObs = doc.splitTextToSize(obs, 275);
+                        doc.text(splitObs, 14, 32);
+                    } // else removido: Observações aparecem apenas no cabeçalho
                 }
             }
 
+            // Add total page count to all pages (canto direito)
+            const totalPages = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.setFontSize(9);
+                doc.setTextColor(120);
+                doc.text(`Página ${i} de ${totalPages}`, 282, 200, { align: 'right' });
+            }
+
             // Save PDF
-            doc.save(`Radares_BR040_${new Date().toISOString().split('T')[0]}.pdf`);
-            this.showToast('PDF exportado com sucesso!', 'success');
+            const fileName = `Relatorio_Radares_BR040_${new Date().toISOString().split('T')[0]}.pdf`;
+            doc.save(fileName);
+            this.showToast('Relatório profissional exportado com sucesso!', 'success');
 
         } catch (error) {
             console.error('Error exporting PDF:', error);
             this.showToast('Erro ao exportar PDF: ' + error.message, 'error');
         }
     },
+
+    /**
+     * Add professional footer to PDF page
+     */
+    addPageFooter(doc, pageNumber) {
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Relatório gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 200);
+        doc.text('BR-040 - Sistema de Fiscalização de Radares', 148, 200, { align: 'center' });
+        // Page number will be added at the end with total count
+    },
+
+    /**
+     * Open lightbox with image preview
+     */
+    openLightbox(photos, currentIndex) {
+        this.lightboxPhotos = photos;
+        this.lightboxCurrentIndex = currentIndex;
+
+        const modal = document.getElementById('lightbox-modal');
+        const img = document.getElementById('lightbox-image');
+        const caption = modal.querySelector('.lightbox-caption');
+
+        img.src = photos[currentIndex].data;
+        caption.textContent = `Foto ${currentIndex + 1} de ${photos.length}`;
+
+        modal.classList.add('open');
+    },
+
+    /**
+     * Navigate lightbox (previous/next)
+     */
+    navigateLightbox(direction) {
+        const newIndex = this.lightboxCurrentIndex + direction;
+
+        if (newIndex >= 0 && newIndex < this.lightboxPhotos.length) {
+            this.lightboxCurrentIndex = newIndex;
+
+            const img = document.getElementById('lightbox-image');
+            const caption = document.querySelector('.lightbox-caption');
+
+            img.src = this.lightboxPhotos[newIndex].data;
+            caption.textContent = `Foto ${newIndex + 1} de ${this.lightboxPhotos.length}`;
+        }
+    },
+
+    /**
+     * Close lightbox
+     */
+    closeLightbox() {
+        document.getElementById('lightbox-modal').classList.remove('open');
+    },
+
+    /**
+     * Setup lightbox event listeners
+     */
+    setupLightbox() {
+        // Close button
+        const closeBtn = document.querySelector('.lightbox-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                this.closeLightbox();
+            });
+        }
+
+        // Navigation buttons
+        const prevBtn = document.querySelector('.lightbox-prev');
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => {
+                this.navigateLightbox(-1);
+            });
+        }
+
+        const nextBtn = document.querySelector('.lightbox-next');
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                this.navigateLightbox(1);
+            });
+        }
+
+        // ESC key to close
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('lightbox-modal');
+            if (modal && modal.classList.contains('open')) {
+                if (e.key === 'Escape') {
+                    this.closeLightbox();
+                }
+                // Arrow keys for navigation
+                if (e.key === 'ArrowLeft') this.navigateLightbox(-1);
+                if (e.key === 'ArrowRight') this.navigateLightbox(1);
+            }
+        });
+
+        // Click outside to close
+        const modal = document.getElementById('lightbox-modal');
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target.id === 'lightbox-modal') {
+                    this.closeLightbox();
+                }
+            });
+        }
+    },
+
 
     /**
      * Export to Excel with photos report

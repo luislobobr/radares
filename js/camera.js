@@ -6,6 +6,7 @@
 const camera = {
     currentPhotos: [],
     currentChecklistPhotos: [],
+    currentEditChecklistPhotos: [], // For editing existing checklist
 
     /**
      * Initialize camera functionality
@@ -22,6 +23,10 @@ const camera = {
         const btnChecklistCamera = document.getElementById('btn-checklist-camera');
         const btnChecklistGallery = document.getElementById('btn-checklist-gallery');
         const checklistPhotosPreview = document.getElementById('checklist-photos-preview');
+
+        // Photo input for checklist EDIT (new)
+        const checklistEditPhotoInput = document.getElementById('checklist-edit-photo-input');
+        const btnEditChecklistCamera = document.getElementById('btn-edit-checklist-camera');
 
         // Radar form photo handlers
         if (btnTakePhoto) {
@@ -63,6 +68,20 @@ const camera = {
         if (checklistPhotoInput) {
             checklistPhotoInput.addEventListener('change', (e) => {
                 this.handleFileSelect(e, 'checklist');
+            });
+        }
+
+        // Checklist EDIT photo handlers (new)
+        if (btnEditChecklistCamera) {
+            btnEditChecklistCamera.addEventListener('click', () => {
+                checklistEditPhotoInput.setAttribute('capture', 'environment');
+                checklistEditPhotoInput.click();
+            });
+        }
+
+        if (checklistEditPhotoInput) {
+            checklistEditPhotoInput.addEventListener('change', (e) => {
+                this.handleFileSelect(e, 'checklist-edit');
             });
         }
     },
@@ -158,11 +177,60 @@ const camera = {
         if (!container) return;
 
         container.innerHTML = photos.map((photo, index) => `
-            <div class="photo-preview-item">
-                <img src="${photo.data}" alt="Foto ${index + 1}">
+            <div class="photo-preview-item" draggable="true" data-index="${index}" data-type="${type}">
+                <img src="${photo.data}" alt="Foto ${index + 1}" style="cursor: pointer;" data-photo-index="${index}">
                 <button class="remove-photo" data-type="${type}" data-id="${photo.id}">×</button>
             </div>
         `).join('');
+
+        // Add click handlers to images for lightbox preview
+        container.querySelectorAll('img[data-photo-index]').forEach((img, idx) => {
+            img.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (typeof app !== 'undefined' && app.openLightbox) {
+                    app.openLightbox(photos, idx);
+                }
+            });
+        });
+
+        // Setup drag & drop
+        const items = container.querySelectorAll('.photo-preview-item[draggable="true"]');
+        items.forEach((item) => {
+            item.addEventListener('dragstart', (e) => {
+                item.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/html', item.innerHTML);
+                e.dataTransfer.setData('index', item.dataset.index);
+                e.dataTransfer.setData('type', item.dataset.type);
+            });
+
+            item.addEventListener('dragend', () => {
+                item.classList.remove('dragging');
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                item.classList.add('drag-over');
+            });
+
+            item.addEventListener('dragleave', () => {
+                item.classList.remove('drag-over');
+            });
+
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                item.classList.remove('drag-over');
+
+                const fromIndex = parseInt(e.dataTransfer.getData('index'));
+                const toIndex = parseInt(item.dataset.index);
+                const dragType = e.dataTransfer.getData('type');
+
+                if (fromIndex !== toIndex && dragType === type) {
+                    this.reorderPhotos(fromIndex, toIndex, type);
+                }
+            });
+        });
 
         // Add remove handlers
         container.querySelectorAll('.remove-photo').forEach(btn => {
@@ -176,15 +244,46 @@ const camera = {
     },
 
     /**
+     * Reorder photos array after drag & drop
+     */
+    reorderPhotos(fromIndex, toIndex, type) {
+        let photos;
+        let containerId;
+
+        if (type === 'radar') {
+            photos = this.currentPhotos;
+            containerId = 'photos-preview';
+        } else if (type === 'checklist') {
+            photos = this.currentChecklistPhotos;
+            containerId = 'checklist-photos-preview';
+        } else if (type === 'checklist-edit') {
+            photos = this.currentEditChecklistPhotos;
+            containerId = 'checklist-details-photos-preview';
+        }
+
+        if (!photos) return;
+
+        // Move item in array
+        const [movedItem] = photos.splice(fromIndex, 1);
+        photos.splice(toIndex, 0, movedItem);
+
+        // Re-render
+        this.renderPhotosPreview(containerId, photos, type);
+    },
+
+    /**
      * Remove a photo
      */
     removePhoto(photoId, type) {
         if (type === 'radar') {
             this.currentPhotos = this.currentPhotos.filter(p => p.id !== photoId);
             this.renderPhotosPreview('photos-preview', this.currentPhotos, 'radar');
-        } else {
+        } else if (type === 'checklist') {
             this.currentChecklistPhotos = this.currentChecklistPhotos.filter(p => p.id !== photoId);
             this.renderPhotosPreview('checklist-photos-preview', this.currentChecklistPhotos, 'checklist');
+        } else if (type === 'checklist-edit') {
+            this.currentEditChecklistPhotos = this.currentEditChecklistPhotos.filter(p => p.id !== photoId);
+            this.renderPhotosPreview('checklist-details-photos-preview', this.currentEditChecklistPhotos, 'checklist-edit');
         }
     },
 
@@ -192,7 +291,10 @@ const camera = {
      * Get current photos for saving
      */
     getPhotos(type) {
-        return type === 'radar' ? [...this.currentPhotos] : [...this.currentChecklistPhotos];
+        if (type === 'radar') return [...this.currentPhotos];
+        if (type === 'checklist') return [...this.currentChecklistPhotos];
+        if (type === 'checklist-edit') return [...this.currentEditChecklistPhotos];
+        return [];
     },
 
     /**
@@ -202,9 +304,12 @@ const camera = {
         if (type === 'radar') {
             this.currentPhotos = photos || [];
             this.renderPhotosPreview('photos-preview', this.currentPhotos, 'radar');
-        } else {
+        } else if (type === 'checklist') {
             this.currentChecklistPhotos = photos || [];
             this.renderPhotosPreview('checklist-photos-preview', this.currentChecklistPhotos, 'checklist');
+        } else if (type === 'checklist-edit') {
+            this.currentEditChecklistPhotos = photos || [];
+            this.renderPhotosPreview('checklist-details-photos-preview', this.currentEditChecklistPhotos, 'checklist-edit');
         }
     },
 
@@ -220,6 +325,11 @@ const camera = {
         if (type === 'checklist' || !type) {
             this.currentChecklistPhotos = [];
             const container = document.getElementById('checklist-photos-preview');
+            if (container) container.innerHTML = '';
+        }
+        if (type === 'checklist-edit' || !type) {
+            this.currentEditChecklistPhotos = [];
+            const container = document.getElementById('checklist-details-photos-preview');
             if (container) container.innerHTML = '';
         }
     }
