@@ -1697,6 +1697,106 @@ body {
     color: var(--text);
 }
 
+
+/* ============================================
+   Histórico de Checklists  
+   ============================================ */
+.checklist-history-section {
+    margin-top: var(--space-lg);
+    padding-top: var(--space-md);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.checklist-history-section h3 {
+    margin-bottom: var(--space-md);
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.history-list {
+    max-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.history-item:hover {
+    background: rgba(99, 102, 241, 0.2);
+}
+
+.history-item.current {
+    background: rgba(99, 102, 241, 0.3);
+    border-left: 3px solid var(--accent-primary);
+}
+
+.history-item-date {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.history-item-status {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+}
+
+.history-item-status.conforme {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--accent-success);
+}
+
+.history-item-status.nao-conforme {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--accent-danger);
+}
+
+.history-item-status.pendente {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--accent-warning);
+}
+
+/* Modo Edição Inline */
+.checklist-edit-mode .info-row {
+    display: flex;
+    flex-direction: column;
+}
+
+.checklist-edit-mode input[type="text"],
+.checklist-edit-mode input[type="number"],
+.checklist-edit-mode select,
+.checklist-edit-mode textarea {
+    background: var(--bg-primary);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm);
+    color: var(--text-primary);
+    margin-top: var(--space-xs);
+}
+
+.checklist-edit-mode .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.checklist-edit-mode .checkbox-group input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-primary);
+}
+
 /* Print Styles */
 @media print {
 
