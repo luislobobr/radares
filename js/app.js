@@ -334,7 +334,19 @@ const app = {
      */
     async loadDashboard() {
         try {
-            const stats = await db.getStats();
+            // Use synced radares for accurate statistics
+            const radares = await this.getSyncedRadares();
+            const recentChecklists = await db.getRecentActivity(5);
+
+            // Calculate stats from synced data
+            const stats = {
+                total: radares.length,
+                conformes: radares.filter(r => r.status === 'conforme').length,
+                naoConformes: radares.filter(r => r.status === 'nao-conforme').length,
+                pendentes: radares.filter(r => r.status === 'pendente' || !r.status).length,
+                totalPer: radares.filter(r => r.tipo === 'per').length,
+                totalEducativo: radares.filter(r => r.tipo === 'educativo').length,
+            };
 
             document.getElementById('stat-total').textContent = stats.total;
             document.getElementById('stat-conformes').textContent = stats.conformes;
@@ -345,11 +357,10 @@ const app = {
 
             // Render recent activity
             const recentList = document.getElementById('recent-list');
-            if (stats.recentChecklists.length === 0) {
+            if (recentChecklists.length === 0) {
                 recentList.innerHTML = '<p class="empty-message">Nenhuma verificação realizada ainda.</p>';
             } else {
-                const radares = await db.getRadares();
-                recentList.innerHTML = stats.recentChecklists.map(checklist => {
+                recentList.innerHTML = recentChecklists.map(checklist => {
                     const radar = radares.find(r => r.id === checklist.radarId);
                     return `
                         <div class="activity-item">
@@ -368,26 +379,34 @@ const app = {
     },
 
     /**
- * Load radares list
- */
+     * Get radares with status synchronized from checklists
+     */
+    async getSyncedRadares() {
+        const radares = await db.getRadares();
+        const checklists = await db.getChecklists();
+
+        // Update each radar's status based on the most recent checklist
+        radares.forEach(radar => {
+            const radarChecklists = checklists
+                .filter(c => String(c.radarId) === String(radar.id))
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            if (radarChecklists.length > 0) {
+                const lastChecklist = radarChecklists[0];
+                radar.status = lastChecklist.status;
+                radar.lastChecklistDate = lastChecklist.date;
+            }
+        });
+
+        return radares;
+    },
+
+    /**
+     * Load radares list
+     */
     async loadRadares() {
         try {
-            const radares = await db.getRadares();
-            const checklists = await db.getChecklists();
-
-            // Update each radar's status based on the most recent checklist
-            radares.forEach(radar => {
-                const radarChecklists = checklists
-                    .filter(c => c.radarId === radar.id)
-                    .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-                if (radarChecklists.length > 0) {
-                    const lastChecklist = radarChecklists[0];
-                    radar.status = lastChecklist.status;
-                    radar.lastChecklistDate = lastChecklist.date;
-                }
-            });
-
+            const radares = await this.getSyncedRadares();
             this.renderRadares(radares);
         } catch (error) {
             console.error('Error loading radares:', error);
@@ -467,7 +486,7 @@ const app = {
      * Filter radares by search term
      */
     async filterRadares(searchTerm) {
-        const radares = await db.getRadares();
+        const radares = await this.getSyncedRadares();
         const term = searchTerm.toLowerCase();
 
         const filtered = radares.filter(r =>
@@ -483,7 +502,7 @@ const app = {
      * Filter radares by status or tipo
      */
     async filterByStatus(filter) {
-        const radares = await db.getRadares();
+        const radares = await this.getSyncedRadares();
 
         if (filter === 'all') {
             this.renderRadares(radares);
@@ -1393,7 +1412,7 @@ const app = {
      */
     async loadExportPreview() {
         try {
-            const allRadares = await db.getRadares();
+            const allRadares = await this.getSyncedRadares();
             const container = document.getElementById('export-table-container');
             const countSpan = document.getElementById('export-count');
             const radarSelect = document.getElementById('export-filter-radar');
@@ -1468,7 +1487,7 @@ const app = {
      * Get filtered radares based on export filters
      */
     async getFilteredRadaresForExport() {
-        const allRadares = await db.getRadares();
+        const allRadares = await this.getSyncedRadares();
         const tipoFilter = document.getElementById('export-filter-tipo').value;
         const radarFilter = document.getElementById('export-filter-radar').value;
 
@@ -1588,6 +1607,105 @@ const app = {
     },
 
     /**
+     * Render summary page with stats boxes and conformity graph
+     */
+    renderSummaryPage(doc, stats, title, checklists, radares) {
+        doc.setFontSize(18);
+        doc.setTextColor(99, 102, 241);
+        doc.text(title, 14, 15);
+
+        // Statistics boxes
+        doc.setFontSize(11);
+        doc.setTextColor(60);
+
+        const boxWidth = 65;
+        const boxHeight = 22;
+        const startY = 25;
+
+        // Total box
+        doc.setFillColor(99, 102, 241);
+        doc.roundedRect(14, startY, boxWidth, boxHeight, 3, 3, 'F');
+        doc.setTextColor(255);
+        doc.setFontSize(24);
+        doc.text(stats.total.toString(), 14 + boxWidth / 2, startY + 12, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text('Total de Radares', 14 + boxWidth / 2, startY + 18, { align: 'center' });
+
+        // Conformes box
+        doc.setFillColor(16, 185, 129);
+        doc.roundedRect(84, startY, boxWidth, boxHeight, 3, 3, 'F');
+        doc.setFontSize(24);
+        doc.text(stats.conformes.toString(), 84 + boxWidth / 2, startY + 12, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text('Conformes', 84 + boxWidth / 2, startY + 18, { align: 'center' });
+
+        // Não Conformes box
+        doc.setFillColor(239, 68, 68);
+        doc.roundedRect(154, startY, boxWidth, boxHeight, 3, 3, 'F');
+        doc.setFontSize(24);
+        doc.text(stats.naoConformes.toString(), 154 + boxWidth / 2, startY + 12, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text('Não Conformes', 154 + boxWidth / 2, startY + 18, { align: 'center' });
+
+        // Pendentes box
+        doc.setFillColor(245, 158, 11);
+        doc.roundedRect(224, startY, boxWidth, boxHeight, 3, 3, 'F');
+        doc.setFontSize(24);
+        doc.text(stats.pendentes.toString(), 224 + boxWidth / 2, startY + 12, { align: 'center' });
+        doc.setFontSize(10);
+        doc.text('Pendentes', 224 + boxWidth / 2, startY + 18, { align: 'center' });
+
+        // Visual graph - % distribution
+        const graphY = 55;
+        const totalChecked = stats.conformes + stats.naoConformes;
+        if (totalChecked > 0) {
+            const conformePercent = (stats.conformes / totalChecked) * 100;
+            const naoConformePercent = (stats.naoConformes / totalChecked) * 100;
+
+            doc.setFontSize(14);
+            doc.setTextColor(60);
+            doc.text('Distribuição de Conformidade', 14, graphY);
+
+            // Bar graph
+            const barWidth = 275;
+            const barHeight = 25;
+            const barY = graphY + 5;
+
+            // Conforme bar
+            const conformeWidth = (conformePercent / 100) * barWidth;
+            doc.setFillColor(16, 185, 129);
+            doc.rect(14, barY, conformeWidth, barHeight, 'F');
+
+            // Não Conforme bar
+            doc.setFillColor(239, 68, 68);
+            doc.rect(14 + conformeWidth, barY, barWidth - conformeWidth, barHeight, 'F');
+
+            // Labels
+            doc.setTextColor(255);
+            doc.setFontSize(12);
+            if (conformePercent > 15) {
+                doc.text(`${conformePercent.toFixed(1)}%`, 14 + conformeWidth / 2, barY + 16, { align: 'center' });
+            }
+            if (naoConformePercent > 15) {
+                doc.text(`${naoConformePercent.toFixed(1)}%`, 14 + conformeWidth + (barWidth - conformeWidth) / 2, barY + 16, { align: 'center' });
+            }
+        }
+
+        // Key findings
+        doc.setFontSize(14);
+        doc.setTextColor(60);
+        doc.text('Principais Achados', 14, 95);
+
+        doc.setFontSize(10);
+        doc.text(`• Total de ${checklists.length} verificações realizadas`, 14, 105);
+        doc.text(`• Taxa de conformidade: ${totalChecked > 0 ? ((stats.conformes / totalChecked) * 100).toFixed(1) : 0}%`, 14, 112);
+        doc.text(`• ${stats.pendentes} radares aguardando verificação`, 14, 119);
+
+        const radaresComFotos = radares.filter(r => r.photos && r.photos.length > 0).length;
+        doc.text(`• ${radaresComFotos} radares com registro fotográfico`, 14, 126);
+    },
+
+    /**
      * Export to PDF with enhancements - Professional Report
      */
     async exportToPDF() {
@@ -1604,7 +1722,16 @@ const app = {
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('landscape');
-            const stats = await db.getStats();
+
+            // Calculate stats from synced radares (not from db)
+            const stats = {
+                total: radares.length,
+                conformes: radares.filter(r => r.status === 'conforme').length,
+                naoConformes: radares.filter(r => r.status === 'nao-conforme').length,
+                pendentes: radares.filter(r => r.status === 'pendente' || !r.status).length,
+                totalPer: radares.filter(r => r.tipo === 'per').length,
+                totalEducativo: radares.filter(r => r.tipo === 'educativo').length,
+            };
 
             // ========================================
             // CAPA PROFISSIONAL
@@ -1628,107 +1755,55 @@ const app = {
             // RESUMO EXECUTIVO COM GRÁFICOS
             // ========================================
             doc.addPage();
-            this.addPageFooter(doc, 2); // Page 2
+            this.addPageFooter(doc, 2);
+            this.renderSummaryPage(doc, stats, 'Resumo Executivo', checklists, radares);
 
-            doc.setFontSize(18);
-            doc.setTextColor(99, 102, 241);
-            doc.text('Resumo Executivo', 14, 15);
+            // ========================================
+            // RESUMO POR TIPO (PER e Educativo)
+            // ========================================
+            let currentPage = 3;
 
-            // Statistics boxes
-            doc.setFontSize(11);
-            doc.setTextColor(60);
+            // Calculate stats for PER radares
+            const radaresPerPage = radares.filter(r => r.tipo === 'per');
+            const checklistsPer = checklists.filter(c => radaresPerPage.some(r => r.id === c.radarId));
 
-            const boxWidth = 65;
-            const boxHeight = 22;
-            const startY = 25;
+            if (radaresPerPage.length > 0) {
+                const statsPer = {
+                    total: radaresPerPage.length,
+                    conformes: radaresPerPage.filter(r => r.status === 'conforme').length,
+                    naoConformes: radaresPerPage.filter(r => r.status === 'nao-conforme').length,
+                    pendentes: radaresPerPage.filter(r => r.status === 'pendente' || !r.status).length,
+                };
 
-            // Total box
-            doc.setFillColor(99, 102, 241);
-            doc.roundedRect(14, startY, boxWidth, boxHeight, 3, 3, 'F');
-            doc.setTextColor(255);
-            doc.setFontSize(24);
-            doc.text(stats.total.toString(), 14 + boxWidth / 2, startY + 12, { align: 'center' });
-            doc.setFontSize(10);
-            doc.text('Total de Radares', 14 + boxWidth / 2, startY + 18, { align: 'center' });
-
-            // Conformes box
-            doc.setFillColor(16, 185, 129);
-            doc.roundedRect(84, startY, boxWidth, boxHeight, 3, 3, 'F');
-            doc.setFontSize(24);
-            doc.text(stats.conformes.toString(), 84 + boxWidth / 2, startY + 12, { align: 'center' });
-            doc.setFontSize(10);
-            doc.text('Conformes', 84 + boxWidth / 2, startY + 18, { align: 'center' });
-
-            // Não Conformes box
-            doc.setFillColor(239, 68, 68);
-            doc.roundedRect(154, startY, boxWidth, boxHeight, 3, 3, 'F');
-            doc.setFontSize(24);
-            doc.text(stats.naoConformes.toString(), 154 + boxWidth / 2, startY + 12, { align: 'center' });
-            doc.setFontSize(10);
-            doc.text('Não Conformes', 154 + boxWidth / 2, startY + 18, { align: 'center' });
-
-            // Pendentes box
-            doc.setFillColor(245, 158, 11);
-            doc.roundedRect(224, startY, boxWidth, boxHeight, 3, 3, 'F');
-            doc.setFontSize(24);
-            doc.text(stats.pendentes.toString(), 224 + boxWidth / 2, startY + 12, { align: 'center' });
-            doc.setFontSize(10);
-            doc.text('Pendentes', 224 + boxWidth / 2, startY + 18, { align: 'center' });
-
-            // Visual graph - % distribution
-            const graphY = 55;
-            const totalChecked = stats.conformes + stats.naoConformes;
-            if (totalChecked > 0) {
-                const conformePercent = (stats.conformes / totalChecked) * 100;
-                const naoConformePercent = (stats.naoConformes / totalChecked) * 100;
-
-                doc.setFontSize(14);
-                doc.setTextColor(60);
-                doc.text('Distribuição de Conformidade', 14, graphY);
-
-                // Bar graph
-                const barWidth = 275;
-                const barHeight = 25;
-                const barY = graphY + 5;
-
-                // Conforme bar
-                const conformeWidth = (conformePercent / 100) * barWidth;
-                doc.setFillColor(16, 185, 129);
-                doc.rect(14, barY, conformeWidth, barHeight, 'F');
-
-                // Não Conforme bar
-                doc.setFillColor(239, 68, 68);
-                doc.rect(14 + conformeWidth, barY, barWidth - conformeWidth, barHeight, 'F');
-
-                // Labels
-                doc.setTextColor(255);
-                doc.setFontSize(12);
-                if (conformePercent > 15) {
-                    doc.text(`${conformePercent.toFixed(1)}%`, 14 + conformeWidth / 2, barY + 16, { align: 'center' });
-                }
-                if (naoConformePercent > 15) {
-                    doc.text(`${naoConformePercent.toFixed(1)}%`, 14 + conformeWidth + (barWidth - conformeWidth) / 2, barY + 16, { align: 'center' });
-                }
+                doc.addPage();
+                this.addPageFooter(doc, currentPage);
+                this.renderSummaryPage(doc, statsPer, 'Resumo Executivo - Radares PER', checklistsPer, radaresPerPage);
+                currentPage++;
             }
 
-            // Key findings
-            doc.setFontSize(14);
-            doc.setTextColor(60);
-            doc.text('Principais Achados', 14, 95);
+            // Calculate stats for Educativo radares
+            const radaresEducativo = radares.filter(r => r.tipo === 'educativo');
+            const checklistsEducativo = checklists.filter(c => radaresEducativo.some(r => r.id === c.radarId));
 
-            doc.setFontSize(10);
-            doc.text(`• Total de ${checklists.length} verificações realizadas`, 14, 105);
-            doc.text(`• Taxa de conformidade: ${totalChecked > 0 ? ((stats.conformes / totalChecked) * 100).toFixed(1) : 0}%`, 14, 112);
-            doc.text(`• ${stats.pendentes} radares aguardando verificação`, 14, 119);
+            if (radaresEducativo.length > 0) {
+                const statsEducativo = {
+                    total: radaresEducativo.length,
+                    conformes: radaresEducativo.filter(r => r.status === 'conforme').length,
+                    naoConformes: radaresEducativo.filter(r => r.status === 'nao-conforme').length,
+                    pendentes: radaresEducativo.filter(r => r.status === 'pendente' || !r.status).length,
+                };
 
-            const radaresComFotos = radares.filter(r => r.photos && r.photos.length > 0).length;
-            doc.text(`• ${radaresComFotos} radares com registro fotográfico`, 14, 126);
+                doc.addPage();
+                this.addPageFooter(doc, currentPage);
+                this.renderSummaryPage(doc, statsEducativo, 'Resumo Executivo - Radares Educativos', checklistsEducativo, radaresEducativo);
+                currentPage++;
+            }
 
             // ========================================
             // TABELA MELHORADA COM MAIS COLUNAS
             // ========================================
             doc.addPage();
-            this.addPageFooter(doc, 3);
+            this.addPageFooter(doc, currentPage);
 
             doc.setFontSize(16);
             doc.setTextColor(99, 102, 241);
