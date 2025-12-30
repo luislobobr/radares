@@ -368,11 +368,26 @@ const app = {
     },
 
     /**
-     * Load radares list
-     */
+ * Load radares list
+ */
     async loadRadares() {
         try {
             const radares = await db.getRadares();
+            const checklists = await db.getChecklists();
+
+            // Update each radar's status based on the most recent checklist
+            radares.forEach(radar => {
+                const radarChecklists = checklists
+                    .filter(c => c.radarId === radar.id)
+                    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                if (radarChecklists.length > 0) {
+                    const lastChecklist = radarChecklists[0];
+                    radar.status = lastChecklist.status;
+                    radar.lastChecklistDate = lastChecklist.date;
+                }
+            });
+
             this.renderRadares(radares);
         } catch (error) {
             console.error('Error loading radares:', error);
