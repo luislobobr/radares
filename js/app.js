@@ -241,6 +241,14 @@ const app = {
             });
         }
 
+        // Edit checklist mode button
+        const btnEditChecklistMode = document.getElementById('btn-edit-checklist-mode');
+        if (btnEditChecklistMode) {
+            btnEditChecklistMode.addEventListener('click', () => {
+                this.enableChecklistEditMode();
+            });
+        }
+
         // Checklist search and filters
         const searchChecklistInput = document.getElementById('search-checklist');
         if (searchChecklistInput) {
@@ -1098,12 +1106,166 @@ const app = {
             // Render radar photos (READONLY - no × button)
             this.renderRadarPhotosReadonly(radar.photos || []);
 
+            // Load checklist history for this radar
+            this.loadChecklistHistory(checklist.radarId, checklistId);
+
+            // Reset edit mode buttons
+            document.getElementById('btn-edit-checklist-mode').style.display = 'inline-flex';
+            document.getElementById('btn-save-checklist-edit').style.display = 'none';
+
             // Open modal
             document.getElementById('modal-checklist-details').classList.add('open');
 
         } catch (error) {
             console.error('Error opening checklist details:', error);
             this.showToast('Erro ao abrir detalhes do checklist', 'error');
+        }
+    },
+
+    /**
+     * Load checklist history for a radar
+     */
+    async loadChecklistHistory(radarId, currentChecklistId) {
+        try {
+            const checklists = await db.getChecklistsByRadar(radarId);
+            const historyContainer = document.getElementById('checklist-history-list');
+
+            if (!historyContainer) return;
+
+            if (checklists.length <= 1) {
+                historyContainer.innerHTML = '<p class="empty-message">Nenhuma verificação anterior.</p>';
+                return;
+            }
+
+            const sortedChecklists = checklists.sort((a, b) =>
+                new Date(b.date) - new Date(a.date)
+            );
+
+            historyContainer.innerHTML = sortedChecklists.map(checklist => `
+                <div class="history-item ${checklist.id === currentChecklistId ? 'current' : ''}" 
+                     data-checklist-id="${checklist.id}">
+                    <span class="history-item-date">📅 ${this.formatDate(checklist.date)}</span>
+                    <span class="history-item-status ${checklist.status}">${this.getStatusLabel(checklist.status)}</span>
+                </div>
+            `).join('');
+
+            historyContainer.querySelectorAll('.history-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const checklistId = item.dataset.checklistId;
+                    this.closeAllModals();
+                    this.openChecklistDetails(checklistId);
+                });
+            });
+        } catch (error) {
+            console.error('Error loading checklist history:', error);
+        }
+    },
+
+    /**
+     * Enable edit mode for checklist details
+     */
+    async enableChecklistEditMode() {
+        const checklistId = this.currentEditingChecklistId;
+        if (!checklistId) return;
+
+        const checklist = await db.getChecklist(checklistId);
+        if (!checklist) return;
+
+        const dataContainer = document.getElementById('checklist-details-data');
+
+        dataContainer.innerHTML = `
+            <div class="checklist-edit-mode">
+                <div class="info-row">
+                    <label>📅 Data:</label>
+                    <input type="datetime-local" id="edit-checklist-date" 
+                           value="${new Date(checklist.date).toISOString().slice(0, 16)}">
+                </div>
+                <div class="info-row">
+                    <label>📏 Distância da Placa (metros):</label>
+                    <input type="number" id="edit-distancia-placa" 
+                           value="${checklist.distanciaPlaca || ''}" placeholder="Ex: 100">
+                </div>
+                <div class="info-row">
+                    <label>✅ Status:</label>
+                    <select id="edit-checklist-status">
+                        <option value="conforme" ${checklist.status === 'conforme' ? 'selected' : ''}>✅ Conforme</option>
+                        <option value="nao-conforme" ${checklist.status === 'nao-conforme' ? 'selected' : ''}>❌ Não Conforme</option>
+                        <option value="pendente" ${checklist.status === 'pendente' ? 'selected' : ''}>⏳ Pendente</option>
+                    </select>
+                </div>
+                <div class="info-row">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edit-placa-presente" ${checklist.placaPresente ? 'checked' : ''}>
+                        <label for="edit-placa-presente">📋 Placa Presente</label>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edit-placa-legivel" ${checklist.placaLegivel ? 'checked' : ''}>
+                        <label for="edit-placa-legivel">👁️ Placa Legível</label>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edit-pintura-solo" ${checklist.pinturaSolo ? 'checked' : ''}>
+                        <label for="edit-pintura-solo">🎨 Pintura Solo</label>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edit-sem-obstrucao" ${checklist.semObstrucao ? 'checked' : ''}>
+                        <label for="edit-sem-obstrucao">🚧 Sem Obstrução</label>
+                    </div>
+                </div>
+                <div class="info-row full-width">
+                    <label>📝 Observações:</label>
+                    <textarea id="edit-checklist-obs" rows="3">${checklist.observacoes || ''}</textarea>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('btn-edit-checklist-mode').style.display = 'none';
+        document.getElementById('btn-save-checklist-edit').style.display = 'inline-flex';
+
+        this.showToast('Modo de edição ativado', 'info');
+    },
+
+    /**
+     * Save checklist edit from details modal
+     */
+    async saveChecklistEdit() {
+        try {
+            const checklistId = this.currentEditingChecklistId;
+            if (!checklistId) return;
+
+            const checklist = await db.getChecklist(checklistId);
+
+            const updatedData = {
+                id: checklistId,
+                radarId: checklist.radarId,
+                date: document.getElementById('edit-checklist-date')?.value || checklist.date,
+                distanciaPlaca: parseInt(document.getElementById('edit-distancia-placa')?.value) || null,
+                status: document.getElementById('edit-checklist-status')?.value || checklist.status,
+                placaPresente: document.getElementById('edit-placa-presente')?.checked ?? checklist.placaPresente,
+                placaLegivel: document.getElementById('edit-placa-legivel')?.checked ?? checklist.placaLegivel,
+                pinturaSolo: document.getElementById('edit-pintura-solo')?.checked ?? checklist.pinturaSolo,
+                semObstrucao: document.getElementById('edit-sem-obstrucao')?.checked ?? checklist.semObstrucao,
+                observacoes: document.getElementById('edit-checklist-obs')?.value || '',
+                photos: camera.getPhotos('checklist-edit')
+            };
+
+            await db.saveChecklist(updatedData);
+
+            this.closeAllModals();
+            this.showToast('Checklist atualizado!', 'success');
+
+            this.loadDashboard();
+            if (this.currentView === 'checklist') {
+                this.loadChecklists();
+            }
+        } catch (error) {
+            console.error('Error saving checklist edit:', error);
+            this.showToast('Erro ao salvar alterações', 'error');
         }
     },
 
@@ -1188,44 +1350,6 @@ const app = {
         } catch (error) {
             console.error('Error editing checklist:', error);
             this.showToast('Erro ao editar checklist', 'error');
-        }
-    },
-
-    /**
-     * Save checklist edits (photos only)
-     */
-    async saveChecklistEdit() {
-        try {
-            if (!this.currentEditingChecklistId) {
-                this.showToast('Nenhum checklist em edição', 'error');
-                return;
-            }
-
-            const currentChecklist = await db.getChecklist(this.currentEditingChecklistId);
-
-            // Update only photos, keep other data
-            const updatedChecklist = {
-                ...currentChecklist,
-                id: this.currentEditingChecklistId,
-                photos: camera.getPhotos('checklist-edit'),
-                updatedAt: new Date().toISOString()
-            };
-
-            await db.saveChecklist(updatedChecklist);
-
-            this.closeAllModals();
-            camera.clearPhotos('checklist-edit');
-            this.showToast('Fotos do checklist atualizadas!', 'success');
-            this.loadChecklists();
-            if (this.currentView === 'dashboard') {
-                this.loadDashboard();
-            }
-
-            this.currentEditingChecklistId = null;
-
-        } catch (error) {
-            console.error('Error saving checklist edit:', error);
-            this.showToast('Erro ao salvar alterações', 'error');
         }
     },
 
@@ -1673,9 +1797,9 @@ const app = {
                     .filter(c => c.radarId === radar.id)
                     .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-                const radarPhotos = radar.photos || [];
+                // APENAS fotos do checklist (não incluir fotos do radar)
                 const checklistPhotos = lastChecklist?.photos || [];
-                const allPhotos = [...radarPhotos, ...checklistPhotos];
+                const allPhotos = checklistPhotos; // Apenas fotos do checklist
 
                 if (allPhotos.length === 0) continue;
 
